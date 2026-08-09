@@ -1,0 +1,8 @@
+{
+  "name": "Remix GeoGuard Map Monitor \u0026 Change Detector",
+  "description": "Upload place datasets, inspect and capture map snapshots, and analyze temporal changes like construction, accidents, nature events, or tree cutting with Gemini AI.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
