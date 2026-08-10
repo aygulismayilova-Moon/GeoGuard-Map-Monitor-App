@@ -6,7 +6,43 @@ description: GeoGuard geospatial satellite monitoring, vertical map snapshot cap
 # GeoGuard Program Skill & Technical Reference
 
 ## Overview
-This skill documents the technical execution patterns, data structures, and operation workflows for the **GeoGuard** satellite and drone geospatial monitoring system.
+This skill documents the technical execution patterns, data structures, directory structure, and operation workflows for the **GeoGuard** satellite and drone geospatial monitoring system.
+
+## Project File Structure
+```
+├── server.ts                       # Express backend server with Gemini AI analysis proxies & static map capture
+├── index.html                      # HTML entry point
+├── package.json                    # Dependencies & build scripts (vite + esbuild server.ts)
+├── firestore.rules                 # Security rules for Firestore collections
+├── firebase-blueprint.json         # Firebase project schema blueprint
+├── AGENTS.md                       # High-level developer guidelines & project conventions
+├── SKILL.md                        # Technical skill reference & architecture guide
+└── src/                            # Frontend React Application
+    ├── main.tsx                    # React application entry point
+    ├── App.tsx                     # Main layout, global state, tab routing & Firestore subscription hooks
+    ├── index.css                   # Tailwind CSS imports & global design tokens
+    ├── types.ts                    # Global TypeScript interfaces (MonitoredPlace, Snapshot, IncidentAlarm, etc.)
+    ├── components/                 # UI View Components & Modals
+    │   ├── Header.tsx              # Top navigation bar, status indicators, quick action buttons
+    │   ├── GoogleMapView.tsx       # Main interactive map view, satellite layer, zoom controls & instant snapshot capture
+    │   ├── PlaceGrid.tsx           # Monitored location cards, place management, coordinates view & detail modal
+    │   ├── SnapshotManager.tsx     # Vertical snapshot gallery, timeline history, dual-image A/B comparison slider
+    │   ├── AccidentScannerModal.tsx# Incident scanner feed, drone detection alerts & live risk map
+    │   ├── AddPlaceModal.tsx       # Custom target location entry modal
+    │   ├── CsvUploadModal.tsx      # Batch location CSV import handler
+    │   ├── ApiKeyHelpModal.tsx     # Google Maps & Gemini API key setup instructions
+    │   └── ErrorBoundary.tsx       # Global UI error boundary & crash recovery
+    ├── utils/                      # Core Engineering Utilities
+    │   ├── mapImageCanvas.ts       # Vertical (480x720) map image capture, tile compositor & synthetic snapshot generator
+    │   ├── firestoreService.ts     # Firestore real-time sync, CRUD operations & data sanitization
+    │   ├── snapshotStore.ts        # Quota-safe local storage manager & sample snapshot fallback generator
+    │   └── audioAlarm.ts           # Web Audio API synthesizer for incident alarm sound effects
+    ├── data/                       # Seed Data & Initial Presets
+    │   ├── samplePlaces.ts         # Pre-populated global monitoring locations (Amazon, Kiev, Tokyo, etc.)
+    │   └── sampleAccidentsAndAlarms.ts # Pre-configured accident events and risk thresholds
+    └── lib/                        # Client Initialization
+        └── firebase.ts             # Firebase app & Firestore service initialization
+```
 
 ## 1. Vertical Map Snapshot Engine (`/src/utils/mapImageCanvas.ts`)
 - **Aspect Ratio & Dimensions**: All map images and snapshot tiles are captured and rendered in **vertical orientation (480px width × 720px height)**.
