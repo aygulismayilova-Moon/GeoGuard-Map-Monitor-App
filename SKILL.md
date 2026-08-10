@@ -11,6 +11,7 @@ This skill documents the technical execution patterns, data structures, director
 ## Project File Structure
 ```
 ├── server.ts                       # Express backend server with Gemini AI analysis proxies & static map capture
+├── main.py                         # Python CLI utility for geospatial coordinate math, Web Mercator tiling & change simulation
 ├── index.html                      # HTML entry point
 ├── package.json                    # Dependencies & build scripts (vite + esbuild server.ts)
 ├── firestore.rules                 # Security rules for Firestore collections
@@ -74,3 +75,8 @@ This skill documents the technical execution patterns, data structures, director
 - `SnapshotManager.tsx`: Timeline viewer, vertical dual-snapshot comparison slider (A/B wipe), and change inspection report modal.
 - `AccidentScannerModal.tsx`: Real-time incident scanner monitoring drone alerts, traffic incidents, and environmental changes.
 - `AlarmsView.tsx`: Active threshold alarm configuration and automated notification manager.
+
+## 5. Python Geospatial Utility (`main.py`)
+- Standalone CLI utility for coordinate conversion, Web Mercator tile indexing (`lat_lng_to_tile`), Haversine distance calculation, and offline change detection simulation.
+- Supports commands: `--list`, `--analyze <PLACE_NAME>`, `--tile <LAT> <LNG> <ZOOM>`, `--distance <LAT1> <LNG1> <LAT2> <LNG2>`, and `--check-server`.
+
