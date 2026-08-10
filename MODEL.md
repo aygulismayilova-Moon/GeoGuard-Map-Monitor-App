@@ -134,4 +134,3 @@ class GeospatialMonitorSystem:
                 alerts.append({"area": area["name"], "message": message, "timestamp": datetime.now()})
                 
         return alerts
-```
