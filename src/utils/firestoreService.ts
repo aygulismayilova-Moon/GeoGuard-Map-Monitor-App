@@ -60,6 +60,22 @@ function isQuotaError(error: any): boolean {
   );
 }
 
+function sanitizeForFirestore<T extends Record<string, any>>(obj: T): T {
+  if (!obj || typeof obj !== 'object') return obj;
+  const clean: any = Array.isArray(obj) ? [] : {};
+  for (const key of Object.keys(obj)) {
+    const val = obj[key];
+    if (val !== undefined) {
+      if (val && typeof val === 'object' && !(val instanceof Date)) {
+        clean[key] = sanitizeForFirestore(val);
+      } else {
+        clean[key] = val;
+      }
+    }
+  }
+  return clean as T;
+}
+
 function handleFirestoreError(
   actionName: string,
   error: any,
@@ -146,7 +162,7 @@ export async function savePlaceToFirestore(place: PlaceItem): Promise<void> {
   if (isQuotaExceeded) return;
   try {
     const docRef = doc(db, PLACES_COLLECTION, place.id);
-    await setDoc(docRef, place, { merge: true });
+    await setDoc(docRef, sanitizeForFirestore(place), { merge: true });
   } catch (error) {
     handleFirestoreError('savePlaceToFirestore', error, OperationType.WRITE, `${PLACES_COLLECTION}/${place.id}`);
   }
@@ -161,7 +177,7 @@ export async function savePlacesToFirestore(places: PlaceItem[]): Promise<void> 
     const batch = writeBatch(db);
     places.forEach((place) => {
       const docRef = doc(db, PLACES_COLLECTION, place.id);
-      batch.set(docRef, place, { merge: true });
+      batch.set(docRef, sanitizeForFirestore(place), { merge: true });
     });
     await batch.commit();
   } catch (error) {
@@ -227,7 +243,7 @@ export async function saveSnapshotToFirestore(snapshot: MapSnapshot): Promise<vo
   if (isQuotaExceeded) return;
   try {
     const docRef = doc(db, SNAPSHOTS_COLLECTION, snapshot.id);
-    await setDoc(docRef, snapshot, { merge: true });
+    await setDoc(docRef, sanitizeForFirestore(snapshot), { merge: true });
   } catch (error) {
     handleFirestoreError('saveSnapshotToFirestore', error, OperationType.WRITE, `${SNAPSHOTS_COLLECTION}/${snapshot.id}`);
   }
@@ -287,7 +303,7 @@ export async function saveAccidentEventToFirestore(event: AccidentEvent): Promis
   if (isQuotaExceeded) return;
   try {
     const docRef = doc(db, ACCIDENTS_COLLECTION, event.id);
-    await setDoc(docRef, event, { merge: true });
+    await setDoc(docRef, sanitizeForFirestore(event), { merge: true });
   } catch (error) {
     handleFirestoreError('saveAccidentEventToFirestore', error, OperationType.WRITE, `${ACCIDENTS_COLLECTION}/${event.id}`);
   }
@@ -343,7 +359,7 @@ export async function saveIncidentAlarmToFirestore(alarm: IncidentAlarm): Promis
   if (isQuotaExceeded) return;
   try {
     const docRef = doc(db, ALARMS_COLLECTION, alarm.id);
-    await setDoc(docRef, alarm, { merge: true });
+    await setDoc(docRef, sanitizeForFirestore(alarm), { merge: true });
   } catch (error) {
     handleFirestoreError('saveIncidentAlarmToFirestore', error, OperationType.WRITE, `${ALARMS_COLLECTION}/${alarm.id}`);
   }

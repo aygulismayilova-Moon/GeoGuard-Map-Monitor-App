@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { PlaceItem, MapSnapshot } from '../types';
 import { APIProvider, Map, AdvancedMarker, Pin, InfoWindow } from '@vis.gl/react-google-maps';
 import { Camera, ZoomIn, ZoomOut, Layers, MapPin, Sparkles, Key, CheckCircle2, SlidersHorizontal, AlertTriangle } from 'lucide-react';
-import { generateSyntheticMapSnapshot } from '../utils/mapImageCanvas';
+import { generateSyntheticMapSnapshot, captureGoogleMapSnapshot } from '../utils/mapImageCanvas';
 import html2canvas from 'html2canvas';
 
 interface GoogleMapViewProps {
@@ -59,33 +59,17 @@ export const GoogleMapView: React.FC<GoogleMapViewProps> = ({
     setIsCapturing(true);
 
     try {
-      let imageDataUrl = '';
-
-      // If map element is rendered and html2canvas works, capture DOM, otherwise generate high-res synthetic snapshot canvas
-      if (hasValidKey && mapContainerRef.current) {
-        try {
-          const canvas = await html2canvas(mapContainerRef.current, {
-            useCORS: true,
-            allowTaint: true,
-            scale: 1.5,
-          });
-          imageDataUrl = canvas.toDataURL('image/png');
-        } catch (e) {
-          console.warn('html2canvas capture fallback to map canvas generator', e);
-        }
-      }
-
-      if (!imageDataUrl || imageDataUrl.length < 100) {
-        imageDataUrl = generateSyntheticMapSnapshot({
-          placeName: selectedPlace.place_name,
-          eventType: simulatedEventType,
-          dateText: `${captureDate} - ${simulatedEventType}`,
-          lat: selectedPlace.latitude,
-          lng: selectedPlace.longitude,
-          zoom: zoom,
-          mapType: mapType,
-        });
-      }
+      const imageDataUrl = await captureGoogleMapSnapshot({
+        mapContainer: mapContainerRef.current,
+        apiKey: API_KEY,
+        placeName: selectedPlace.place_name,
+        lat: selectedPlace.latitude,
+        lng: selectedPlace.longitude,
+        zoom: zoom,
+        mapType: mapType,
+        eventType: simulatedEventType,
+        dateText: `${captureDate} - ${simulatedEventType}`,
+      });
 
       const formattedDateLabel = new Date(captureDate).toLocaleDateString('en-US', {
         month: 'short',

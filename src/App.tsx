@@ -117,8 +117,9 @@ export default function App() {
       });
 
     // Seed initial sample snapshots for demo experience
-    const initialSnaps = initializeSampleSnapshots(places);
-    setSnapshots(initialSnaps);
+    initializeSampleSnapshots(places).then((initialSnaps) => {
+      setSnapshots(initialSnaps);
+    });
 
     // Subscribe to Firestore for real-time Sync
     const unsubPlaces = subscribePlaces((remotePlaces) => {
@@ -227,24 +228,24 @@ export default function App() {
   };
 
   // Handle CSV Dataset Load
-  const handleDatasetLoaded = (newPlaces: PlaceItem[]) => {
+  const handleDatasetLoaded = async (newPlaces: PlaceItem[]) => {
     updatePlaces(newPlaces);
     if (newPlaces.length > 0) {
       setSelectedPlaceId(newPlaces[0].id);
 
       // Seed snapshots for new dataset
-      const newSnaps = initializeSampleSnapshots(newPlaces);
+      const newSnaps = await initializeSampleSnapshots(newPlaces);
       setSnapshots(newSnaps);
     }
   };
 
   // Reset to initial sample data
-  const handleResetSampleData = () => {
+  const handleResetSampleData = async () => {
     updatePlaces(INITIAL_PLACES);
     if (INITIAL_PLACES.length > 0) {
       setSelectedPlaceId(INITIAL_PLACES[0].id);
       localStorage.removeItem('geoguard_map_snapshots_v1');
-      const resetSnaps = initializeSampleSnapshots(INITIAL_PLACES);
+      const resetSnaps = await initializeSampleSnapshots(INITIAL_PLACES);
       setSnapshots(resetSnaps);
     }
   };

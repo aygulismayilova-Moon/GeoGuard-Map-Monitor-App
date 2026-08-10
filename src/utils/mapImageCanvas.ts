@@ -1,6 +1,7 @@
 /**
  * Map Image & Snapshot Utility
- * Generates high-fidelity satellite/roadmap canvas representations and handles map viewport canvas capture.
+ * Generates high-fidelity satellite/roadmap canvas representations, fetches Google Static Map imagery,
+ * and handles map viewport canvas capture with metadata overlays.
  */
 
 export interface SimulationOverlayOptions {
@@ -13,14 +14,327 @@ export interface SimulationOverlayOptions {
   mapType?: 'satellite' | 'roadmap' | 'hybrid' | 'terrain';
 }
 
+export interface CaptureSnapshotParams extends SimulationOverlayOptions {
+  mapContainer?: HTMLDivElement | null;
+  apiKey?: string;
+}
+
+/**
+ * Returns a Google Maps Static API URL if a valid API key is present
+ */
+export function getGoogleStaticMapUrl(
+  lat: number,
+  lng: number,
+  zoom: number,
+  mapType: string = 'satellite',
+  apiKey: string = '',
+  width = 480,
+  height = 720
+): string {
+  if (!apiKey || apiKey === 'YOUR_API_KEY' || apiKey.trim() === '') return '';
+  return `https://maps.googleapis.com/maps/api/staticmap?center=${lat},${lng}&zoom=${zoom}&size=${width}x${height}&maptype=${mapType}&markers=color:blue%7Clabel:P%7C${lat},${lng}&key=${apiKey}`;
+}
+
+/**
+ * Fetches Google Static Map image via backend API route if available
+ */
+async function fetchServerGoogleStaticMap(
+  lat: number,
+  lng: number,
+  zoom: number,
+  mapType: string,
+  width = 480,
+  height = 720
+): Promise<string | null> {
+  try {
+    const res = await fetch(`/api/map-snapshot?lat=${lat}&lng=${lng}&zoom=${zoom}&maptype=${mapType}&width=${width}&height=${height}`);
+    if (res.ok) {
+      const data = await res.json();
+      if (data && data.success && data.imageDataUrl) {
+        return data.imageDataUrl;
+      }
+    }
+  } catch (err) {
+    console.warn('Backend map snapshot proxy error:', err);
+  }
+  return null;
+}
+
+/**
+ * Renders real high-resolution satellite or roadmap map tiles for exact coordinates on a canvas
+ */
+export async function fetchRealTileMapCanvas(
+  lat: number,
+  lng: number,
+  zoom: number,
+  mapType: string = 'satellite',
+  width = 480,
+  height = 720
+): Promise<HTMLCanvasElement | null> {
+  try {
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return null;
+
+    const z = Math.min(Math.max(zoom, 1), 19);
+    const n = Math.pow(2, z);
+    const xFrac = ((lng + 180) / 360) * n;
+    const latRad = (lat * Math.PI) / 180;
+    const yFrac = ((1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2) * n;
+
+    const centerTileX = Math.floor(xFrac);
+    const centerTileY = Math.floor(yFrac);
+
+    const tileSize = 256;
+    const offsetX = Math.round((xFrac - centerTileX) * tileSize);
+    const offsetY = Math.round((yFrac - centerTileY) * tileSize);
+
+    const centerX = width / 2;
+    const centerY = height / 2;
+
+    const isSatellite = mapType === 'satellite' || mapType === 'hybrid' || !mapType;
+
+    const tilePromises: Promise<void>[] = [];
+
+    for (let dx = -2; dx <= 2; dx++) {
+      for (let dy = -3; dy <= 3; dy++) {
+        const tx = (centerTileX + dx + n) % n;
+        const ty = centerTileY + dy;
+        if (ty < 0 || ty >= n) continue;
+
+        let tileUrl = '';
+        if (isSatellite) {
+          tileUrl = `https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/${z}/${ty}/${tx}`;
+        } else {
+          tileUrl = `https://basemaps.cartocdn.com/rastertiles/voyager/${z}/${tx}/${ty}.png`;
+        }
+
+        const promise = new Promise<void>((resolve) => {
+          const img = new Image();
+          img.crossOrigin = 'anonymous';
+          img.onload = () => {
+            const posX = centerX + dx * tileSize - offsetX;
+            const posY = centerY + dy * tileSize - offsetY;
+            ctx.drawImage(img, posX, posY, tileSize, tileSize);
+            resolve();
+          };
+          img.onerror = () => {
+            resolve();
+          };
+          img.src = tileUrl;
+        });
+
+        tilePromises.push(promise);
+      }
+    }
+
+    await Promise.all(tilePromises);
+    return canvas;
+  } catch (err) {
+    console.warn('Real tile canvas render notice:', err);
+    return null;
+  }
+}
+
+/**
+ * Asynchronously captures a real Google Map snapshot in vertical orientation
+ */
+export async function captureGoogleMapSnapshot(params: CaptureSnapshotParams): Promise<string> {
+  const { mapContainer, apiKey, placeName, lat, lng, zoom, mapType = 'satellite', eventType = 'Baseline', dateText } = params;
+
+  // 1. Try server proxy for official Google Static Maps API (Vertical 480x720)
+  const serverGoogleImage = await fetchServerGoogleStaticMap(lat, lng, zoom, mapType, 480, 720);
+  if (serverGoogleImage) {
+    try {
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      await new Promise<void>((resolve, reject) => {
+        img.onload = () => resolve();
+        img.onerror = () => reject(new Error('Failed to load server google image'));
+        img.src = serverGoogleImage;
+      });
+
+      const canvas = document.createElement('canvas');
+      canvas.width = img.width || 480;
+      canvas.height = img.height || 720;
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        ctx.drawImage(img, 0, 0);
+        drawMapHUDAndOverlays(ctx, canvas.width, canvas.height, { placeName, lat, lng, zoom, eventType, dateText });
+        return canvas.toDataURL('image/jpeg', 0.82);
+      }
+    } catch (err) {
+      console.warn('Server static map overlay error:', err);
+    }
+  }
+
+  // 2. Try client API Key for official Google Static Maps API (Vertical 480x720)
+  const staticMapUrl = getGoogleStaticMapUrl(lat, lng, zoom, mapType, apiKey || '', 480, 720);
+  if (staticMapUrl) {
+    try {
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      await new Promise<void>((resolve, reject) => {
+        img.onload = () => resolve();
+        img.onerror = () => reject(new Error('Failed to load Google Static Map image'));
+        img.src = staticMapUrl;
+      });
+
+      const canvas = document.createElement('canvas');
+      canvas.width = img.width || 480;
+      canvas.height = img.height || 720;
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        ctx.drawImage(img, 0, 0);
+        drawMapHUDAndOverlays(ctx, canvas.width, canvas.height, { placeName, lat, lng, zoom, eventType, dateText });
+        return canvas.toDataURL('image/jpeg', 0.82);
+      }
+    } catch (err) {
+      console.warn('Google Static Map fetch notice:', err);
+    }
+  }
+
+  // 3. Try DOM canvas capture from interactive Google Map container
+  if (mapContainer) {
+    const mapCanvases = Array.from(mapContainer.querySelectorAll('canvas'));
+    if (mapCanvases.length > 0) {
+      try {
+        const primaryCanvas = mapCanvases[0];
+        const canvas = document.createElement('canvas');
+        canvas.width = 480;
+        canvas.height = 720;
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          mapCanvases.forEach((c) => {
+            try { ctx.drawImage(c, 0, 0, canvas.width, canvas.height); } catch (_) {}
+          });
+          drawMapHUDAndOverlays(ctx, canvas.width, canvas.height, { placeName, lat, lng, zoom, eventType, dateText });
+          const dataUrl = canvas.toDataURL('image/jpeg', 0.82);
+          if (dataUrl && dataUrl.length > 500) {
+            return dataUrl;
+          }
+        }
+      } catch (err) {
+        console.warn('Direct canvas draw notice:', err);
+      }
+    }
+  }
+
+  // 4. Load real satellite / map tiles for exact coordinates (Vertical 480x720)
+  const tileCanvas = await fetchRealTileMapCanvas(lat, lng, zoom, mapType, 480, 720);
+  if (tileCanvas) {
+    const ctx = tileCanvas.getContext('2d');
+    if (ctx) {
+      drawMapHUDAndOverlays(ctx, tileCanvas.width, tileCanvas.height, { placeName, lat, lng, zoom, eventType, dateText });
+      return tileCanvas.toDataURL('image/jpeg', 0.82);
+    }
+  }
+
+  // 5. Fallback synthetic canvas generator (Vertical 480x720)
+  return generateSyntheticMapSnapshot({ placeName, eventType, dateText, lat, lng, zoom, mapType });
+}
+
+/**
+ * Draws HUD metadata (title, coords, zoom, date badge, target crosshair) and event indicators on a canvas context
+ */
+function drawMapHUDAndOverlays(
+  ctx: CanvasRenderingContext2D,
+  width: number,
+  height: number,
+  opts: {
+    placeName: string;
+    lat: number;
+    lng: number;
+    zoom: number;
+    eventType: string;
+    dateText: string;
+  }
+) {
+  const { placeName, lat, lng, zoom, eventType, dateText } = opts;
+
+  // Event overlay additions if simulated
+  let eventText = '';
+  let eventBg = 'rgba(239, 68, 68, 0.9)';
+  if (eventType === 'Construction') {
+    eventText = '⚠️ NEW CONSTRUCTION SITE';
+    eventBg = 'rgba(239, 68, 68, 0.9)';
+  } else if (eventType === 'Accident') {
+    eventText = '🚨 VEHICLE ACCIDENT SCENE';
+    eventBg = 'rgba(220, 38, 38, 0.9)';
+  } else if (eventType === 'Deforestation') {
+    eventText = '🪓 TREE CUTTING / CLEARING';
+    eventBg = 'rgba(217, 119, 6, 0.9)';
+  } else if (eventType === 'Flood') {
+    eventText = '🌊 FLOOD / WATER INUNDATION';
+    eventBg = 'rgba(14, 116, 144, 0.9)';
+  }
+
+  if (eventText) {
+    const bannerW = 250;
+    const bannerX = Math.max(10, (width - bannerW) / 2);
+    ctx.fillStyle = eventBg;
+    ctx.fillRect(bannerX, height - 46, bannerW, 32);
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
+    ctx.strokeRect(bannerX, height - 46, bannerW, 32);
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 11px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(eventText, width / 2, height - 26);
+    ctx.textAlign = 'left';
+  }
+
+  // Map HUD / Location Bar (Top Left)
+  const topBoxW = Math.min(270, width - 180);
+  ctx.fillStyle = 'rgba(15, 23, 42, 0.88)';
+  ctx.fillRect(10, 10, topBoxW, 56);
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
+  ctx.strokeRect(10, 10, topBoxW, 56);
+
+  ctx.fillStyle = '#38bdf8';
+  ctx.font = 'bold 12px sans-serif';
+  const displayTitle = placeName.length > 26 ? placeName.substring(0, 24) + '...' : placeName;
+  ctx.fillText(displayTitle, 18, 28);
+
+  ctx.fillStyle = '#cbd5e1';
+  ctx.font = '10px monospace';
+  ctx.fillText(`LAT:${lat.toFixed(4)} LNG:${lng.toFixed(4)} | Z:${zoom}x`, 18, 46);
+
+  // Timestamp badge (Top Right)
+  const badgeW = 160;
+  ctx.fillStyle = 'rgba(15, 23, 42, 0.88)';
+  ctx.fillRect(width - badgeW - 10, 10, badgeW, 32);
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
+  ctx.strokeRect(width - badgeW - 10, 10, badgeW, 32);
+
+  ctx.fillStyle = '#f8fafc';
+  ctx.font = 'bold 10px sans-serif';
+  ctx.fillText(`📅 ${dateText}`, width - badgeW + 2, 30);
+
+  // Target Crosshair at Center
+  ctx.strokeStyle = 'rgba(239, 68, 68, 0.7)';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.moveTo(width / 2 - 15, height / 2);
+  ctx.lineTo(width / 2 + 15, height / 2);
+  ctx.moveTo(width / 2, height / 2 - 15);
+  ctx.lineTo(width / 2, height / 2 + 15);
+  ctx.stroke();
+
+  ctx.beginPath();
+  ctx.arc(width / 2, height / 2, 8, 0, Math.PI * 2);
+  ctx.stroke();
+}
+
 /**
  * Generates a realistic synthetic satellite/map image data URL for a place and event.
  * Useful for pre-loading initial temporal snapshots (e.g. Yesterday vs Today) or offline map simulation.
  */
 export function generateSyntheticMapSnapshot(options: SimulationOverlayOptions): string {
   const canvas = document.createElement('canvas');
-  canvas.width = 640;
-  canvas.height = 400;
+  canvas.width = 480;
+  canvas.height = 720;
   const ctx = canvas.getContext('2d');
 
   if (!ctx) return '';
@@ -284,5 +598,5 @@ export function generateSyntheticMapSnapshot(options: SimulationOverlayOptions):
   ctx.arc(canvas.width / 2, canvas.height / 2, 8, 0, Math.PI * 2);
   ctx.stroke();
 
-  return canvas.toDataURL('image/png');
+  return canvas.toDataURL('image/jpeg', 0.82);
 }

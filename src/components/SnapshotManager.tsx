@@ -155,7 +155,7 @@ export const SnapshotManager: React.FC<SnapshotManagerProps> = ({
                   }`}
                 >
                   {/* Image Preview Container */}
-                  <div className="relative h-32 bg-slate-900 overflow-hidden cursor-pointer" onClick={() => setPreviewSnapshot(snap)}>
+                  <div className="relative h-52 bg-slate-900 overflow-hidden cursor-pointer" onClick={() => setPreviewSnapshot(snap)}>
                     <img src={snap.imageUrl} alt={snap.dateLabel} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
                     
                     {/* Badge Overlay */}
@@ -299,7 +299,7 @@ export const SnapshotManager: React.FC<SnapshotManagerProps> = ({
               <span className="text-emerald-700 font-bold">Image B: {snapB.dateLabel}</span>
             </div>
 
-            <div className="relative w-full h-[380px] bg-slate-900 rounded-lg overflow-hidden border border-slate-300 shadow-inner select-none">
+            <div className="relative w-full max-w-lg mx-auto h-[520px] bg-slate-900 rounded-lg overflow-hidden border border-slate-300 shadow-inner select-none">
               {/* Image B (Underneath / Current) */}
               <img
                 src={snapB.imageUrl}

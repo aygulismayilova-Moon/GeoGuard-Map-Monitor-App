@@ -1,8 +1,23 @@
 import { MapSnapshot, PlaceItem } from '../types';
-import { generateSyntheticMapSnapshot } from './mapImageCanvas';
+import { captureGoogleMapSnapshot } from './mapImageCanvas';
 import { saveSnapshotToFirestore, deleteSnapshotFromFirestore } from './firestoreService';
 
 const STORAGE_KEY = 'geoguard_map_snapshots_v1';
+
+function safeSaveToLocalStorage(allSnapshots: MapSnapshot[]): void {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(allSnapshots));
+  } catch (e) {
+    console.warn('LocalStorage quota limit reached, pruning older snapshot entries...', e);
+    try {
+      // Keep only most recent 12 snapshots in localStorage cache to prevent quota overflow
+      const trimmed = allSnapshots.slice(0, 12);
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(trimmed));
+    } catch (err2) {
+      console.warn('Failed to save to localStorage after trim:', err2);
+    }
+  }
+}
 
 export function getAllSnapshots(): MapSnapshot[] {
   try {
@@ -30,12 +45,7 @@ export function saveSnapshot(snapshot: MapSnapshot): MapSnapshot[] {
     all.unshift(snapshot);
   }
 
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(all));
-  } catch (e) {
-    console.error('Failed to save snapshot to localStorage', e);
-  }
-
+  safeSaveToLocalStorage(all);
   saveSnapshotToFirestore(snapshot);
 
   return all;
@@ -43,27 +53,22 @@ export function saveSnapshot(snapshot: MapSnapshot): MapSnapshot[] {
 
 export function deleteSnapshot(id: string): MapSnapshot[] {
   const all = getAllSnapshots().filter((s) => s.id !== id);
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(all));
-  } catch (e) {
-    console.error('Failed to delete snapshot from localStorage', e);
-  }
-
+  safeSaveToLocalStorage(all);
   deleteSnapshotFromFirestore(id);
 
   return all;
 }
 
 /**
- * Initializes default historical baseline & today snapshots for sample places.
+ * Initializes default historical baseline & today snapshots for sample places using real map imagery.
  */
-export function initializeSampleSnapshots(places: PlaceItem[]): MapSnapshot[] {
+export async function initializeSampleSnapshots(places: PlaceItem[]): Promise<MapSnapshot[]> {
   const existing = getAllSnapshots();
   if (existing.length > 0) return existing;
 
   const sampleSnapshots: MapSnapshot[] = [];
 
-  places.forEach((place) => {
+  for (const place of places) {
     // Determine event simulation based on place category
     let todayEvent: 'Construction' | 'Accident' | 'Deforestation' | 'Flood' = 'Construction';
     if (place.category?.includes('Traffic')) todayEvent = 'Accident';
@@ -71,7 +76,7 @@ export function initializeSampleSnapshots(places: PlaceItem[]): MapSnapshot[] {
     if (place.category?.includes('Coastal')) todayEvent = 'Flood';
 
     // Baseline Image (Yesterday / Previous Date)
-    const baselineImg = generateSyntheticMapSnapshot({
+    const baselineImg = await captureGoogleMapSnapshot({
       placeName: place.place_name,
       eventType: 'Baseline',
       dateText: 'Jul 28, 2026 - Baseline',
@@ -82,7 +87,7 @@ export function initializeSampleSnapshots(places: PlaceItem[]): MapSnapshot[] {
     });
 
     // Today's Image (With temporal change)
-    const todayImg = generateSyntheticMapSnapshot({
+    const todayImg = await captureGoogleMapSnapshot({
       placeName: place.place_name,
       eventType: todayEvent,
       dateText: 'Aug 09, 2026 - Current',
@@ -121,13 +126,8 @@ export function initializeSampleSnapshots(places: PlaceItem[]): MapSnapshot[] {
       lng: place.longitude,
       eventOverlay: todayEvent,
     });
-  });
-
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(sampleSnapshots));
-  } catch (e) {
-    console.error('Failed to seed sample snapshots', e);
   }
 
+  safeSaveToLocalStorage(sampleSnapshots);
   return sampleSnapshots;
 }
