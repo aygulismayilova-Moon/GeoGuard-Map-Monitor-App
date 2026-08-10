@@ -135,8 +135,3 @@ class GeospatialMonitorSystem:
                 
         return alerts
 ```
-
-> Note: To handle high-resolution imagery and minimize false positives from seasonal foliage or lighting shifts, consider incorporating a semantic segmentation mask or storing multi-band historical indices alongside the raw RGB tiles.
-> 
-Would you like to explore specific optimizations for handling false positives caused by seasonal lighting or shadows in the computer vision pipeline?
-
