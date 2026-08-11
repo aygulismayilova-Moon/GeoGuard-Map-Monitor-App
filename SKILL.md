@@ -71,12 +71,15 @@ This skill documents the technical execution patterns, data structures, director
 - **Quota Resilience**: Includes exponential backoff and automatic structured fallback generation when API rate limits or free-tier quotas are reached.
 
 ## 4. UI Components Architecture
-- `GoogleMapView.tsx`: Interactive satellite map canvas with zoom, pan, map style switcher, and instant vertical snapshot trigger.
-- `SnapshotManager.tsx`: Timeline viewer, vertical dual-snapshot comparison slider (A/B wipe), and change inspection report modal.
-- `AccidentScannerModal.tsx`: Real-time incident scanner monitoring drone alerts, traffic incidents, and environmental changes.
+- `GoogleMapView.tsx`: Interactive satellite map canvas with keyboard navigation shortcuts (`↑↓←→` / `WASD` pan, `+`/`-` zoom, `R` recenter), Automated Snapshot Capture engine (user-defined intervals from 10s to 1 hour with live countdown, event overlay simulation & auto-sync to Firestore), Roadmap ⇄ Satellite view style toggles, closable place description overlay card (with explicit 'X' close button and header toggle), visual change detection guidance badges, and instant vertical snapshot trigger.
+- `SnapshotManager.tsx`: Timeline viewer, side-by-side dual panel comparison view, vertical comparison slider (A/B wipe), Gemini change inspection report panel with extract options (Copy Text, Download .TXT, Download .JSON, Print PDF), and full Official Report Modal view.
+- `AddPlaceModal.tsx`: Modal for adding new locations with strict duplicate control checking place name (case-insensitive trim) and latitude/longitude coordinates against existing dataset. Includes category presets (Construction, Environmental, Infrastructure, etc.).
+- `PlaceGrid.tsx`: High-density location table with colorful, filterable category badges (Construction, Environmental, Infrastructure, Coastal Monitoring, Urban Development, etc.), row selection checkboxes with select-all header toggle, prominent toolbar "Delete Selected" bulk removal button, user deletion confirmation safeguards (confirmation dialogs for both single and bulk removals), interactive quick-filter category chips, search filtering, and sorting capabilities.
+- `CsvUploadModal.tsx`: CSV dataset bulk uploader with PapaParse parsing, header normalization for flexible 9-column, 10-column or custom CSV layouts, automated duplicate filtering on location names and geospatial coordinates, automatic field adjustments (combining `place_name` with `street`, `city` with `country`, and parsing combined `latitude, longitude` columns), and direct deployment into the main Places Grid dataset with real-time LocalStorage and Firestore sync.
+- `AccidentScannerModal.tsx`: Real-time incident scanner monitoring drone alerts, traffic incidents, and environmental changes. Includes Gemma 4 incident detection with auto-attached vertical map snapshots (480x720), manual "Attach / Update Snapshot" controls for any feed incident, and a full-screen Lightbox snapshot inspection modal.
 - `AlarmsView.tsx`: Active threshold alarm configuration and automated notification manager.
 
 ## 5. Python Geospatial Utility (`main.py`)
 - Standalone CLI utility for coordinate conversion, Web Mercator tile indexing (`lat_lng_to_tile`), Haversine distance calculation, and offline change detection simulation.
-- Supports commands: `--list`, `--analyze <PLACE_NAME>`, `--tile <LAT> <LNG> <ZOOM>`, `--distance <LAT1> <LNG1> <LAT2> <LNG2>`, and `--check-server`.
+- Supports commands: `--list`, `--analyze <PLACE_NAME>`, `--output <FILE_PATH>` (extracts report to file), `--format <json|text>`, `--tile <LAT> <LNG> <ZOOM>`, `--distance <LAT1> <LNG1> <LAT2> <LNG2>`, and `--check-server`.
 

@@ -28,6 +28,8 @@ import { Header } from './components/Header';
 import { PlaceGrid } from './components/PlaceGrid';
 import { GoogleMapView } from './components/GoogleMapView';
 import { SnapshotManager } from './components/SnapshotManager';
+import { RecentLocationsSidebar } from './components/RecentLocationsSidebar';
+import { Dashboard } from './components/Dashboard';
 import { CsvUploadModal } from './components/CsvUploadModal';
 import { ApiKeyHelpModal } from './components/ApiKeyHelpModal';
 import { AddPlaceModal } from './components/AddPlaceModal';
@@ -37,6 +39,7 @@ import { MapPin, Info, ArrowDown, Sparkles, Building2, Layers } from 'lucide-rea
 const PLACES_STORAGE_KEY = 'geoguard_places_dataset_v1';
 const ALARMS_STORAGE_KEY = 'geoguard_alarms_dataset_v1';
 const ACCIDENTS_STORAGE_KEY = 'geoguard_accidents_dataset_v1';
+const RECENT_PLACES_KEY = 'geoguard_recent_places_v1';
 
 export default function App() {
   // Places state
@@ -53,6 +56,20 @@ export default function App() {
   // Selected Place
   const [selectedPlaceId, setSelectedPlaceId] = useState<string>(() => {
     return places.length > 0 ? places[0].id : '';
+  });
+
+  // Recent Visited Places State (Up to 5)
+  const [recentPlaceIds, setRecentPlaceIds] = useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem(RECENT_PLACES_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) return parsed;
+      }
+    } catch (e) {
+      console.error('Failed to load recent places', e);
+    }
+    return places.length > 0 ? [places[0].id] : [];
   });
 
   // Snapshots State
@@ -95,8 +112,19 @@ export default function App() {
   const [isApiKeyHelpModalOpen, setIsApiKeyHelpModalOpen] = useState<boolean>(false);
   const [isAccidentScannerOpen, setIsAccidentScannerOpen] = useState<boolean>(false);
 
-  // Map view section ref for smooth scroll
+  // Category Filter state for Dashboard integration
+  const [categoryFilter, setCategoryFilter] = useState<string>('');
+
+  // Section refs for smooth scroll
   const mapViewRef = useRef<HTMLDivElement>(null);
+  const placeGridRef = useRef<HTMLDivElement>(null);
+
+  const handleSelectCategoryFilter = (cat: string) => {
+    setCategoryFilter(cat);
+    if (placeGridRef.current) {
+      placeGridRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
+  };
 
   // Initialize Snapshots and API status
   useEffect(() => {
@@ -192,9 +220,32 @@ export default function App() {
     return map;
   }, [snapshots]);
 
-  // Select Place and scroll down to map inspector
+  // Add location to recent visited places history (max 5)
+  const addToRecentPlaces = (id: string) => {
+    setRecentPlaceIds((prev) => {
+      const filtered = prev.filter((itemId) => itemId !== id);
+      const updated = [id, ...filtered].slice(0, 5);
+      try {
+        localStorage.setItem(RECENT_PLACES_KEY, JSON.stringify(updated));
+      } catch (e) {
+        console.error('Failed to save recent places', e);
+      }
+      return updated;
+    });
+  };
+
+  // Clear recent places history
+  const handleClearRecent = () => {
+    setRecentPlaceIds([]);
+    try {
+      localStorage.removeItem(RECENT_PLACES_KEY);
+    } catch (_) {}
+  };
+
+  // Select Place, add to recent history, and scroll down to map inspector
   const handleSelectPlace = (place: PlaceItem) => {
     setSelectedPlaceId(place.id);
+    addToRecentPlaces(place.id);
 
     // Smooth scroll down to map inspector
     setTimeout(() => {
@@ -227,14 +278,32 @@ export default function App() {
     }
   };
 
-  // Handle CSV Dataset Load
+  // Handle CSV Dataset Load & Deploy to Places Grid
   const handleDatasetLoaded = async (newPlaces: PlaceItem[]) => {
-    updatePlaces(newPlaces);
-    if (newPlaces.length > 0) {
-      setSelectedPlaceId(newPlaces[0].id);
+    if (!newPlaces || newPlaces.length === 0) return;
 
-      // Seed snapshots for new dataset
-      const newSnaps = await initializeSampleSnapshots(newPlaces);
+    const existingIds = new Set(places.map((p) => p.id));
+    const processedNewPlaces = newPlaces.map((np, idx) => {
+      let finalId = np.id;
+      if (!finalId || existingIds.has(finalId)) {
+        finalId = `P_${Date.now().toString(36)}_${idx + 1}`;
+      }
+      existingIds.add(finalId);
+      return {
+        ...np,
+        id: finalId,
+      };
+    });
+
+    // Prepend all uploaded CSV places directly into the places grid
+    const combinedPlaces = [...processedNewPlaces, ...places];
+    updatePlaces(combinedPlaces);
+
+    if (combinedPlaces.length > 0) {
+      setSelectedPlaceId(processedNewPlaces[0]?.id || combinedPlaces[0].id);
+
+      // Seed snapshots for newly deployed dataset items
+      const newSnaps = await initializeSampleSnapshots(combinedPlaces);
       setSnapshots(newSnaps);
     }
   };
@@ -260,8 +329,31 @@ export default function App() {
     }
   };
 
+  // Bulk delete multiple places
+  const handleDeleteMultiplePlaces = (ids: string[]) => {
+    const idSet = new Set(ids);
+    ids.forEach((id) => deletePlaceFromFirestore(id));
+    const filtered = places.filter((p) => !idSet.has(p.id));
+    updatePlaces(filtered);
+    if (selectedPlaceId && idSet.has(selectedPlaceId)) {
+      setSelectedPlaceId(filtered[0]?.id || null);
+    }
+  };
+
   // Add single place
   const handleAddSinglePlace = (newPlace: PlaceItem) => {
+    // Duplicate check guard
+    const cleanNewName = newPlace.place_name.trim().toLowerCase();
+    const isDupName = places.some((p) => p.place_name.trim().toLowerCase() === cleanNewName);
+    const isDupCoords = places.some(
+      (p) => Math.abs(p.latitude - newPlace.latitude) < 0.0001 && Math.abs(p.longitude - newPlace.longitude) < 0.0001
+    );
+
+    if (isDupName || isDupCoords) {
+      console.warn('Duplicate location rejected:', newPlace.place_name);
+      return;
+    }
+
     const updated = [newPlace, ...places];
     updatePlaces(updated);
     setSelectedPlaceId(newPlace.id);
@@ -270,7 +362,14 @@ export default function App() {
   // Accident & Alarm Handlers
   const handleAddAccidentEvent = (event: AccidentEvent) => {
     setAccidentEvents((prev) => {
-      const updated = [event, ...prev];
+      const existingIdx = prev.findIndex((e) => e.id === event.id);
+      let updated: AccidentEvent[];
+      if (existingIdx >= 0) {
+        updated = [...prev];
+        updated[existingIdx] = event;
+      } else {
+        updated = [event, ...prev];
+      }
       try {
         localStorage.setItem(ACCIDENTS_STORAGE_KEY, JSON.stringify(updated));
       } catch (_) {}
@@ -333,9 +432,15 @@ export default function App() {
     return accidentEvents.filter((e) => e.status === 'Alarm Active' || e.severity === 'Critical' || e.severity === 'High').length;
   }, [accidentEvents]);
 
+  // Update single place in state & store
+  const handleUpdatePlace = (updatedPlace: PlaceItem) => {
+    const updated = places.map((p) => (p.id === updatedPlace.id ? updatedPlace : p));
+    updatePlaces(updated);
+  };
+
   // Export current places dataset to CSV
   const handleExportCsv = () => {
-    const headers = ['id', 'place_name', 'area', 'street', 'city', 'country', 'latitude', 'longitude', 'description'];
+    const headers = ['id', 'place_name', 'area', 'street', 'city', 'country', 'latitude', 'longitude', 'description', 'category'];
     const rows = places.map((p) =>
       [
         `"${p.id}"`,
@@ -347,6 +452,7 @@ export default function App() {
         p.latitude,
         p.longitude,
         `"${p.description.replace(/"/g, '""')}"`,
+        `"${(p.category || 'Custom Location').replace(/"/g, '""')}"`,
       ].join(',')
     );
 
@@ -381,8 +487,31 @@ export default function App() {
 
       {/* Main Container */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-5 space-y-6">
-        {/* Section 1: Places Dataset Grid */}
+        {/* Sidebar / Quick-Access Bar: Recent Locations (Last 5 Visited) */}
         <section>
+          <RecentLocationsSidebar
+            places={places}
+            recentIds={recentPlaceIds}
+            selectedPlaceId={selectedPlaceId}
+            onSelectPlace={handleSelectPlace}
+            onClearRecent={handleClearRecent}
+            snapshotsMap={snapshotsCountMap}
+          />
+        </section>
+
+        {/* Analytics Dashboard Section */}
+        <section>
+          <Dashboard
+            places={places}
+            snapshots={snapshots}
+            snapshotsCountMap={snapshotsCountMap}
+            onSelectPlace={handleSelectPlace}
+            onSelectCategoryFilter={handleSelectCategoryFilter}
+          />
+        </section>
+
+        {/* Section 1: Places Dataset Grid */}
+        <section ref={placeGridRef} className="scroll-mt-20">
           <PlaceGrid
             places={places}
             selectedPlaceId={selectedPlaceId}
@@ -390,7 +519,10 @@ export default function App() {
             onSelectPlace={handleSelectPlace}
             onAddPlace={() => setIsAddPlaceModalOpen(true)}
             onDeletePlace={handleDeletePlace}
+            onDeletePlaces={handleDeleteMultiplePlaces}
+            onUpdatePlace={handleUpdatePlace}
             onOpenUploadModal={() => setIsUploadModalOpen(true)}
+            externalCategoryFilter={categoryFilter}
           />
         </section>
 
@@ -436,12 +568,14 @@ export default function App() {
         isOpen={isUploadModalOpen}
         onClose={() => setIsUploadModalOpen(false)}
         onDatasetLoaded={handleDatasetLoaded}
+        existingPlaces={places}
       />
 
       <AddPlaceModal
         isOpen={isAddPlaceModalOpen}
         onClose={() => setIsAddPlaceModalOpen(false)}
         onAddPlace={handleAddSinglePlace}
+        existingPlaces={places}
       />
 
       <ApiKeyHelpModal

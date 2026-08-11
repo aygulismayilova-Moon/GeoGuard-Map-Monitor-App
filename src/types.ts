@@ -1,3 +1,15 @@
+export const STANDARD_PLACE_CATEGORIES = [
+  'Urban Construction',
+  'Coastal Monitoring',
+  'Traffic & Infrastructure',
+  'Forest & Vegetation',
+  'Urban Development',
+  'Public Infrastructure',
+  'Environmental Monitoring',
+  'Industrial Site',
+  'Custom Location',
+] as const;
+
 export interface PlaceItem {
   id: string;
   place_name: string;
@@ -62,6 +74,7 @@ export interface AccidentEvent {
   locationCoordinates: { lat: number; lng: number };
   status: 'Reported' | 'Verified' | 'Resolved' | 'Alarm Active';
   alarmTriggered?: boolean;
+  imageUrl?: string;
 }
 
 export interface IncidentAlarm {
@@ -82,5 +95,6 @@ export interface FilterState {
   area: string;
   city: string;
   country: string;
+  category: string;
 }
 

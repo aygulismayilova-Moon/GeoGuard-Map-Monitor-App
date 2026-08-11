@@ -84,6 +84,8 @@ def main():
     parser = argparse.ArgumentParser(description="GeoGuard Geospatial Satellite Utility (main.py)")
     parser.add_argument("--list", action="store_true", help="List default monitored locations")
     parser.add_argument("--analyze", type=str, metavar="PLACE_NAME", help="Run geospatial change analysis for a location")
+    parser.add_argument("--output", "-o", type=str, metavar="FILE_PATH", help="Extract/Save analysis report to specified output file")
+    parser.add_argument("--format", choices=["json", "text"], default="json", help="Report format for extraction (json or text)")
     parser.add_argument("--tile", nargs=3, metavar=('LAT', 'LNG', 'ZOOM'), help="Convert Lat Lng Zoom to Web Mercator Tile X,Y")
     parser.add_argument("--distance", nargs=4, metavar=('LAT1', 'LNG1', 'LAT2', 'LNG2'), help="Calculate distance in km between two coordinates")
     parser.add_argument("--check-server", action="store_true", help="Check local GeoGuard Express server health")
@@ -112,7 +114,40 @@ def main():
             report = simulate_change_analysis(p["name"], p["lat"], p["lng"])
         else:
             report = simulate_change_analysis(args.analyze, 0.0, 0.0)
-        print(json.dumps(report, indent=2))
+        
+        # Format report output
+        if args.format == "text":
+            report_content = (
+                f"============================================================\n"
+                f"       GEOGUARD SATELLITE INSPECTION REPORT                 \n"
+                f"============================================================\n"
+                f"Target Location : {report['place']}\n"
+                f"Coordinates     : Lat {report['coordinates']['lat']}, Lng {report['coordinates']['lng']}\n"
+                f"Resolution      : {report['verticalResolution']} (Vertical Portrait)\n"
+                f"Web Mercator    : Tile ({report['webMercatorTile']['x']}, {report['webMercatorTile']['y']}) @ Zoom {report['webMercatorTile']['zoom']}\n"
+                f"------------------------------------------------------------\n"
+                f"Change Detected : {report['analysis']['changeDetected']}\n"
+                f"Change Type     : {report['analysis']['changeType']}\n"
+                f"Severity Level  : {report['analysis']['severity']}\n"
+                f"Confidence Score: {report['analysis']['confidenceScore']}%\n"
+                f"------------------------------------------------------------\n"
+                f"EXECUTIVE SUMMARY:\n{report['analysis']['summary']}\n\n"
+                f"AFFECTED SECTORS:\n" + "\n".join(f" - {s}" for s in report['analysis']['changedSectors']) + "\n\n"
+                f"RECOMMENDED ACTIONS:\n" + "\n".join(f" - {a}" for a in report['analysis']['recommendedActions']) + "\n"
+                f"============================================================\n"
+            )
+        else:
+            report_content = json.dumps(report, indent=2)
+
+        print(report_content)
+
+        if args.output:
+            try:
+                with open(args.output, "w", encoding="utf-8") as f:
+                    f.write(report_content)
+                print(f"\n✅ Analysis report successfully extracted to file: {args.output}")
+            except Exception as e:
+                print(f"\n❌ Error extracting report to {args.output}: {e}")
 
     elif args.tile:
         lat, lng, zoom = float(args.tile[0]), float(args.tile[1]), int(args.tile[2])

@@ -21,9 +21,17 @@ import {
   Bell,
   Activity,
   Filter,
+  Camera,
+  Image as ImageIcon,
+  Eye,
+  Download,
+  Maximize2,
+  Zap,
+  X,
 } from 'lucide-react';
 import { PlaceItem, AccidentType, AccidentEvent, IncidentAlarm } from '../types';
 import { playAlarmBeep, startAlarmLoop, stopAlarmLoop } from '../utils/audioAlarm';
+import { generateSyntheticMapSnapshot, captureGoogleMapSnapshot } from '../utils/mapImageCanvas';
 
 interface AccidentScannerModalProps {
   isOpen: boolean;
@@ -84,8 +92,13 @@ export const AccidentScannerModal: React.FC<AccidentScannerModalProps> = ({
   const [alarmSaveSuccess, setAlarmSaveSuccess] = useState<string | null>(null);
   const [isAlarmTesting, setIsAlarmTesting] = useState(false);
 
-  // Incident Feed Filter State
+  // Incident Feed Filter & Snapshot Lightbox State
   const [feedCityFilter, setFeedCityFilter] = useState<string>('All Cities');
+  const [capturingSnapshotEventId, setCapturingSnapshotEventId] = useState<string | null>(null);
+  const [selectedLightboxSnapshot, setSelectedLightboxSnapshot] = useState<{
+    event: AccidentEvent;
+    imageUrl: string;
+  } | null>(null);
 
   // Filter places for focus location select dropdown
   const filteredPlacesForFocus =
@@ -182,6 +195,25 @@ export const AccidentScannerModal: React.FC<AccidentScannerModalProps> = ({
         if (data.detectedEvents && Array.isArray(data.detectedEvents)) {
           data.detectedEvents.forEach((ev: any, idx: number) => {
             totalDetected++;
+
+            // Map accident type to simulated ground overlay tag
+            const eventOverlayType =
+              ev.accidentType === 'Car Accident' ? 'Accident' :
+              ev.accidentType === 'Tree Cutting' ? 'Deforestation' :
+              ev.accidentType === 'New Building Construction' ? 'Construction' :
+              ev.accidentType === 'Heavy Rain / Flood' ? 'Flood' : 'Accident';
+
+            // Auto-generate high-resolution vertical map snapshot for the detected incident
+            const autoSnapshotUrl = generateSyntheticMapSnapshot({
+              placeName: targetPlace?.place_name || 'City Site',
+              eventType: eventOverlayType,
+              dateText: `Gemma 4 Scan ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`,
+              lat: targetPlace?.latitude || 37.7749,
+              lng: targetPlace?.longitude || -122.4194,
+              zoom: 16,
+              mapType: 'satellite',
+            });
+
             const newEvent: AccidentEvent = {
               id: `evt-${Date.now()}-${i}-${idx}`,
               placeId: targetPlace?.id || 'p-gen',
@@ -199,6 +231,7 @@ export const AccidentScannerModal: React.FC<AccidentScannerModalProps> = ({
               },
               status: ev.requiresAlarm ? 'Alarm Active' : 'Reported',
               alarmTriggered: ev.requiresAlarm,
+              imageUrl: autoSnapshotUrl,
             };
             onAddAccidentEvent(newEvent);
 
@@ -209,12 +242,49 @@ export const AccidentScannerModal: React.FC<AccidentScannerModalProps> = ({
         }
       }
 
-      setScanSummary(`Gemma 4 scan complete across ${targetPlacesToScan.length} city site(s). ${totalDetected} incident event(s) recorded to Incident Feed.`);
+      setScanSummary(`Gemma 4 scan complete across ${targetPlacesToScan.length} city site(s). ${totalDetected} incident event(s) recorded to Incident Feed with attached map snapshots.`);
     } catch (err) {
       console.error('Scan error:', err);
       setScanSummary('Failed to complete Gemma 4 scan. Please try again.');
     } finally {
       setIsScanning(false);
+    }
+  };
+
+  // Helper to manually capture / attach a map snapshot to any feed incident
+  const handleAttachSnapshotToFeedEvent = async (evt: AccidentEvent) => {
+    setCapturingSnapshotEventId(evt.id);
+    try {
+      const place = places.find((p) => p.id === evt.placeId) || places[0];
+      const eventOverlayType =
+        evt.accidentType === 'Car Accident' ? 'Accident' :
+        evt.accidentType === 'Tree Cutting' ? 'Deforestation' :
+        evt.accidentType === 'New Building Construction' ? 'Construction' :
+        evt.accidentType === 'Heavy Rain / Flood' ? 'Flood' : 'Accident';
+
+      const now = new Date();
+      const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+      const snapshotDataUrl = await captureGoogleMapSnapshot({
+        placeName: evt.placeName || place?.place_name || 'Incident Location',
+        lat: evt.locationCoordinates?.lat || place?.latitude || 37.7749,
+        lng: evt.locationCoordinates?.lng || place?.longitude || -122.4194,
+        zoom: 16,
+        mapType: 'satellite',
+        eventType: eventOverlayType,
+        dateText: `Incident Feed Snapshot (${timeStr})`,
+      });
+
+      const updatedEvt: AccidentEvent = {
+        ...evt,
+        imageUrl: snapshotDataUrl,
+      };
+
+      onAddAccidentEvent(updatedEvt);
+    } catch (err) {
+      console.error('Failed to attach snapshot to incident event', err);
+    } finally {
+      setCapturingSnapshotEventId(null);
     }
   };
 
@@ -286,7 +356,7 @@ export const AccidentScannerModal: React.FC<AccidentScannerModalProps> = ({
                 </span>
               </div>
               <p className="text-[11px] text-slate-500 font-medium">
-                Detect car accidents, nature events, tree cutting, building construction, heavy rain, wind, animal hazards, and configure automated alarms.
+                Detect car accidents, nature events, tree cutting, building construction, heavy rain, wind, animal hazards, and attach map snapshots directly to feed.
               </p>
             </div>
           </div>
@@ -632,19 +702,21 @@ export const AccidentScannerModal: React.FC<AccidentScannerModalProps> = ({
                 No accident events found for <strong>{feedCityFilter}</strong>. Run a Gemma 4 scan or select "All Cities & Saved Alarms".
               </p>
             ) : (
-              <div className="space-y-2.5">
+              <div className="space-y-3">
                 {filteredFeedEvents.map((evt) => {
                   const matchedAlarm = getMatchingAlarm(evt);
+                  const isCapturingThis = capturingSnapshotEventId === evt.id;
 
                   return (
                     <div
                       key={evt.id}
-                      className={`p-3.5 rounded-lg border text-xs space-y-2 transition-all ${
+                      className={`p-3.5 rounded-lg border text-xs space-y-3 transition-all ${
                         evt.status === 'Alarm Active' || evt.severity === 'Critical' || evt.severity === 'High'
                           ? 'bg-rose-50/70 border-rose-200 text-rose-950 shadow-sm'
                           : 'bg-white border-slate-200 text-slate-800'
                       }`}
                     >
+                      {/* Top Header Bar */}
                       <div className="flex items-center justify-between flex-wrap gap-1.5">
                         <div className="flex items-center gap-2 font-bold">
                           <span className="px-2 py-0.5 text-[10px] rounded font-extrabold bg-slate-900 text-white">
@@ -668,30 +740,92 @@ export const AccidentScannerModal: React.FC<AccidentScannerModalProps> = ({
                         </div>
                       </div>
 
-                      <p className="text-xs text-slate-700 leading-relaxed font-medium">{evt.description}</p>
+                      {/* Content & Snapshot Layout Grid */}
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-3 items-start">
+                        {/* Left/Main Column: Description & Metadata */}
+                        <div className="md:col-span-2 space-y-2">
+                          <p className="text-xs text-slate-700 leading-relaxed font-medium">{evt.description}</p>
 
-                      <div className="flex flex-wrap items-center justify-between text-[11px] text-slate-600 pt-2 border-t border-slate-200/60 gap-2">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className="flex items-center gap-1 font-bold text-slate-800 bg-white px-2 py-0.5 rounded border border-slate-200 shadow-2xs">
-                            <MapPin className="w-3.5 h-3.5 text-blue-600" />
-                            {evt.cityName} — {evt.placeName}
-                          </span>
-
-                          {matchedAlarm && (
-                            <span className="flex items-center gap-1 font-extrabold bg-rose-600 text-white px-2 py-0.5 rounded text-[10px] shadow-2xs">
-                              <Siren className="w-3 h-3 animate-pulse" />
-                              Triggered Alarm: {matchedAlarm.label}
+                          <div className="flex flex-wrap items-center gap-2 pt-1 text-[11px] text-slate-600">
+                            <span className="flex items-center gap-1 font-bold text-slate-800 bg-white px-2 py-0.5 rounded border border-slate-200 shadow-2xs">
+                              <MapPin className="w-3.5 h-3.5 text-blue-600" />
+                              {evt.cityName} — {evt.placeName}
                             </span>
-                          )}
+
+                            {matchedAlarm && (
+                              <span className="flex items-center gap-1 font-extrabold bg-rose-600 text-white px-2 py-0.5 rounded text-[10px] shadow-2xs">
+                                <Siren className="w-3 h-3 animate-pulse" />
+                                Alarm: {matchedAlarm.label}
+                              </span>
+                            )}
+
+                            <span className={`font-extrabold px-2 py-0.5 rounded ${
+                              evt.severity === 'Critical' ? 'bg-rose-200 text-rose-900' :
+                              evt.severity === 'High' ? 'bg-orange-100 text-orange-900' :
+                              'bg-amber-100 text-amber-900'
+                            }`}>
+                              Severity: {evt.severity}
+                            </span>
+                          </div>
+
+                          {/* Snapshot Action Button */}
+                          <div className="pt-1">
+                            <button
+                              onClick={() => handleAttachSnapshotToFeedEvent(evt)}
+                              disabled={isCapturingThis}
+                              className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded border transition-all ${
+                                evt.imageUrl
+                                  ? 'bg-slate-100 hover:bg-slate-200 text-slate-800 border-slate-300'
+                                  : 'bg-emerald-600 hover:bg-emerald-700 text-white border-emerald-700 shadow-sm'
+                              }`}
+                            >
+                              <Camera className={`w-3.5 h-3.5 ${isCapturingThis ? 'animate-spin' : ''}`} />
+                              <span>
+                                {isCapturingThis
+                                  ? 'Capturing Snapshot...'
+                                  : evt.imageUrl
+                                  ? '📸 Update Map Snapshot'
+                                  : '📸 Attach Map Snapshot'}
+                              </span>
+                            </button>
+                          </div>
                         </div>
 
-                        <span className={`font-extrabold px-2 py-0.5 rounded ${
-                          evt.severity === 'Critical' ? 'bg-rose-200 text-rose-900' :
-                          evt.severity === 'High' ? 'bg-orange-100 text-orange-900' :
-                          'bg-amber-100 text-amber-900'
-                        }`}>
-                          Severity: {evt.severity}
-                        </span>
+                        {/* Right Column: Accident Map Snapshot Thumbnail Card */}
+                        <div className="md:col-span-1">
+                          {evt.imageUrl ? (
+                            <div
+                              onClick={() => setSelectedLightboxSnapshot({ event: evt, imageUrl: evt.imageUrl! })}
+                              className="group relative cursor-pointer rounded-lg overflow-hidden border border-slate-300 bg-slate-900 shadow-sm hover:shadow-md transition-all aspect-[4/3] sm:aspect-[3/4]"
+                            >
+                              <img
+                                src={evt.imageUrl}
+                                alt={`Accident Snapshot for ${evt.title}`}
+                                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
+                              />
+                              <div className="absolute inset-0 bg-slate-900/30 group-hover:bg-slate-900/10 transition-colors flex items-center justify-center">
+                                <span className="bg-slate-900/80 text-white text-[10px] font-bold px-2 py-1 rounded-full border border-white/20 opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1">
+                                  <Maximize2 className="w-3 h-3" /> Inspect
+                                </span>
+                              </div>
+                              <div className="absolute bottom-1 right-1 bg-slate-900/90 text-emerald-300 text-[9px] font-mono px-1.5 py-0.5 rounded border border-emerald-500/40">
+                                480x720 SNAP
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50/80 p-3 text-center flex flex-col items-center justify-center gap-1 h-full min-h-[90px]">
+                              <ImageIcon className="w-5 h-5 text-slate-400" />
+                              <span className="text-[10px] font-semibold text-slate-500">No Snapshot Attached</span>
+                              <button
+                                onClick={() => handleAttachSnapshotToFeedEvent(evt)}
+                                disabled={isCapturingThis}
+                                className="text-[10px] font-bold text-emerald-600 hover:text-emerald-700 underline mt-0.5"
+                              >
+                                {isCapturingThis ? 'Capturing...' : '+ Add Map Snapshot'}
+                              </button>
+                            </div>
+                          )}
+                        </div>
                       </div>
                     </div>
                   );
@@ -701,6 +835,68 @@ export const AccidentScannerModal: React.FC<AccidentScannerModalProps> = ({
           </div>
         )}
       </div>
+
+      {/* Snapshot Lightbox Inspection Modal */}
+      {selectedLightboxSnapshot && (
+        <div className="fixed inset-0 z-60 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-lg w-full p-5 shadow-2xl space-y-4 text-white animate-in zoom-in-95 duration-150">
+            {/* Header */}
+            <div className="flex items-start justify-between border-b border-slate-800 pb-3">
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="px-2 py-0.5 text-[10px] font-extrabold bg-rose-600 text-white rounded">
+                    {selectedLightboxSnapshot.event.accidentType}
+                  </span>
+                  <h4 className="text-sm font-bold text-white">{selectedLightboxSnapshot.event.title}</h4>
+                </div>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  📍 {selectedLightboxSnapshot.event.cityName} — {selectedLightboxSnapshot.event.placeName} ({selectedLightboxSnapshot.event.dateLabel})
+                </p>
+              </div>
+              <button
+                onClick={() => setSelectedLightboxSnapshot(null)}
+                className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Image Frame */}
+            <div className="relative rounded-xl overflow-hidden border border-slate-700 bg-black flex items-center justify-center max-h-[500px]">
+              <img
+                src={selectedLightboxSnapshot.imageUrl}
+                alt="Accident Snapshot Lightbox"
+                className="max-h-[480px] w-auto object-contain shadow-2xl"
+              />
+            </div>
+
+            {/* Description */}
+            <p className="text-xs text-slate-300 leading-relaxed bg-slate-800/60 p-3 rounded-xl border border-slate-700/50">
+              {selectedLightboxSnapshot.event.description}
+            </p>
+
+            {/* Footer Actions */}
+            <div className="flex items-center justify-between pt-2 border-t border-slate-800">
+              <a
+                href={selectedLightboxSnapshot.imageUrl}
+                download={`accident-snapshot-${selectedLightboxSnapshot.event.id}.jpg`}
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-lg shadow transition-colors"
+              >
+                <Download className="w-3.5 h-3.5" />
+                <span>Download Image</span>
+              </a>
+
+              <button
+                onClick={() => setSelectedLightboxSnapshot(null)}
+                className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold rounded-lg border border-slate-700"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
+
