@@ -9,3 +9,9 @@ The goal of this program is to streamline the operations of various agencies res
 The program also features an automated notification system to alert users. For instance, users can set up automatic alerts for specific areas and event types; if such an event occurs in the designated area, a notification is automatically sent to the user.
 
 A Google Maps API key was used.
+
+# Who can be the users of the program?
+* State agencies controlling the territories (Instant detection of unauthorized building construction, tree felling in parks, car accidents, and traffic congestion issues.)
+* Volunteers supporting nature (regarding tree felling and the detection of natural disasters)
+* For drivers to stay informed about roads with heavy traffic and find alternative ways
+* Tourists exploring places to visit (Via the program, tourists can view real images of their intended destination and decide whether or not it interests them.)
