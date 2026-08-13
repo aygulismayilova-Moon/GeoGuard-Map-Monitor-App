@@ -19,18 +19,14 @@ A Google Maps API key was used.
 
 Skills folder:
 
+```text
 skills/
-
 └── geoguard-monitoring/
+    ├── SKILL.md
+    └── references/
+        ├── snapshot-engine.md
+        ├── storage-persistence.md
+        ├── gemini-pipeline.md
+        └── ui-components.md
 
-├── SKILL.md
-
-└── references/
-
-├── snapshot-engine.md
-
-├── storage-persistence.md
-
-├── gemini-pipeline.md
-
-└── ui-components.md
+```
