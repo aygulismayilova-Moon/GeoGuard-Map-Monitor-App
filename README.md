@@ -15,3 +15,15 @@ A Google Maps API key was used.
 * Volunteers supporting nature (regarding tree felling and the detection of natural disasters)
 * For drivers to stay informed about roads with heavy traffic and find alternative ways
 * Tourists exploring places to visit (Via the program, tourists can view real images of their intended destination and decide whether or not it interests them.)
+
+
+Skills folder:
+
+skills/
+└── geoguard-monitoring/
+├── SKILL.md
+└── references/
+├── snapshot-engine.md
+├── storage-persistence.md
+├── gemini-pipeline.md
+└── ui-components.md
