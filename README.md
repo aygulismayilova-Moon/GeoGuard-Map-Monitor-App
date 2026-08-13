@@ -31,7 +31,7 @@ skills/
 
 ```
 
-1. 
+1. `skills/geoguard-monitoring/SKILL.md`
 
 ```
 ---
@@ -52,7 +52,7 @@ The goal of this program is to streamline the operations of various agencies (st
 
 ```
 
-2.
+2. `skills/geoguard-monitoring/references/snapshot-engine.md`
 
 ```
 # Vertical Map Snapshot Engine (`/src/utils/mapImageCanvas.ts`)
@@ -74,7 +74,7 @@ The goal of this program is to streamline the operations of various agencies (st
 
 ```
 
-3. 
+3. `skills/geoguard-monitoring/references/storage-persistence.md`
 
 ```
 # Storage & Persistence (`/src/utils/snapshotStore.ts` & `/src/utils/firestoreService.ts`)
@@ -84,7 +84,7 @@ The goal of this program is to streamline the operations of various agencies (st
 
 ```
 
-4. 
+4. `skills/geoguard-monitoring/references/gemini-pipeline.md`
 
 ```
 # Gemini AI Analysis Pipeline (`server.ts`)
@@ -98,7 +98,7 @@ Includes exponential backoff and automatic structured fallback generation when A
 
 ```
 
-5. 
+5. `skills/geoguard-monitoring/references/ui-components.md`
 
 ```
 # UI Components Architecture
