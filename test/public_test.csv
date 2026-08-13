@@ -1,0 +1,11 @@
+id,place_name,area,street,city,country,latitude,longitude,description,category
+1,Bryggen Historic Waterfront,Vestland,Bryggen 11,Bergen,Norway,60.3975,5.3242,"Iconic UNESCO World Heritage historic wharf featuring colorful wooden commercial buildings.",Historical Site
+2,Vigeland Sculpture Park,Frogner,Nobels gate 32,Oslo,Norway,59.9271,10.7008,"The world's largest sculpture park created by a single artist, showcasing over 200 works by Gustav Vigeland.",Park & Art
+3,Nidaros Cathedral,Midtbyen,Bispegata 11,Trondheim,Norway,63.4269,10.3969,"Northernmost medieval cathedral in the world and Norway's national sanctuary built over St. Olav's burial site.",Religious Landmark
+4,Arctic Cathedral,Tromsdalen,Hans Nilsens vei 41,Tromsø,Norway,69.6480,18.9873,"Striking modern church built in 1965, famous for its dramatic triangular architecture and stained glass.",Architecture
+5,Holmenkollen Ski Museum & Tower,Holmenkollen,Kongeveien 5,Oslo,Norway,59.9640,10.6675,"World-famous ski jumping hill offering panoramic views of Oslo and the surrounding fjord.",Sports & Recreation
+6,Preikestolen Mountain Lodge,Rogaland,Preikestolvegen 521,Jørpeland,Norway,58.9915,6.1381,"Main base camp and starting point for the famous hike to the Pulpit Rock cliff overlooking Lysefjorden.",Nature & Hiking
+7,The Fram Museum,Bygdøy,Bygdøynesveien 36,Oslo,Norway,59.9033,10.6996,"Maritime museum dedicated to Norwegian polar exploration, built around the historic wooden ship Fram.",Museum
+8,Heddal Stave Church,Vestfold og Telemark,Heddalsvegen 412,Notodden,Norway,59.5796,9.1762,"Norway's largest remaining triple-nave stave church dating back to the early 13th century.",Historical Site
+9,Fløibanen Funicular,Sentrum,Vetrlidsallmenningen 23A,Bergen,Norway,60.3963,5.3283,"Funicular railway transporting passengers to the top of Mount Fløyen for sweeping views of Bergen.",Attraction
+10,Lofotr Viking Museum,Nordland,Torvveien 155,Bøstad,Norway,68.2494,13.7548,"Living history museum featuring the world's largest reconstructed Viking chieftain's longhouse.",Museum & Cultural

@@ -1,0 +1,101 @@
+id,place_name,area,street,city,country,latitude,longitude,description,category
+1,National Monument (Monas),DKI Jakarta,Jl. Medan Merdeka Barat No.12,Jakarta Central,Indonesia,-6.1754,106.8272,"Iconic 132-meter obelisk in Merdeka Square symbolizing Indonesian independence.",Historical Site
+2,Istiqlal Mosque,DKI Jakarta,Jl. Taman Wijaya Kusuma,Jakarta Central,Indonesia,-6.1702,106.8314,"The largest mosque in Southeast Asia located near Merdeka Square.",Religious Landmark
+3,Jakarta Cathedral,DKI Jakarta,Jl. Katedral No.7,Jakarta Central,Indonesia,-6.1692,106.8331,"Neo-Gothic Roman Catholic cathedral built in 1901.",Religious Landmark
+4,Taman Mini Indonesia Indah,DKI Jakarta,Jl. Raya Taman Mini,Jakarta East,Indonesia,-6.3024,106.8952,"Culture-based recreational park showcasing traditional houses from all Indonesian provinces.",Cultural Park
+5,Ancol Dreamland,DKI Jakarta,Jl. Lodan Timur No.7,Jakarta North,Indonesia,-6.1256,106.8335,"Major coastal resort and entertainment complex including Fantasy World (Dufan).",Theme Park
+6,Kota Tua (Old Batavia),DKI Jakarta,Jl. Taman Fatahillah No.1,Jakarta West,Indonesia,-6.1352,106.8133,"Historic square surrounded by Dutch colonial buildings and museums.",Historical Site
+7,National Museum of Indonesia,DKI Jakarta,Jl. Medan Merdeka Barat No.12,Jakarta Central,Indonesia,-6.1751,106.8219,"Archeological and historical museum known locally as the Elephant Building.",Museum
+8,Grand Indonesia,DKI Jakarta,Jl. M.H. Thamrin No.1,Jakarta Central,Indonesia,-6.1951,106.8208,"Integrated mega-complex featuring a major shopping mall and skyscraper office towers.",Shopping & Urban
+9,Ragunan Zoo,DKI Jakarta,Jl. Harsono RM No.1,Jakarta South,Indonesia,-6.3123,106.8202,"Historic 140-hectare zoo housing endangered Indonesian species like Komodo dragons.",Wildlife & Zoo
+10,Thousand Islands (Pulau Seribu),DKI Jakarta,Kepulauan Seribu Utara,Jakarta North,Indonesia,-5.6112,106.5621,"Archipelago off Jakarta's coast popular for diving, beaches, and island resorts.",Island & Beach
+11,Suropati Park,DKI Jakarta,Jl. Taman Suropati,Jakarta Central,Indonesia,-6.1994,106.8326,"Historic green park in Menteng known for ASEAN monuments and outdoor art.",Park
+12,Wayang Museum,DKI Jakarta,Jl. Pintu Besar Utara No.27,Jakarta West,Indonesia,-6.1348,106.8126,"Museum dedicated to Javanese wayang puppetry and traditional performance art.",Museum
+13,Gelora Bung Karno Stadium,DKI Jakarta,Jl. Pintu Satu Senayan,Jakarta Central,Indonesia,-6.2183,106.8022,"Multi-purpose sports arena hosting national and international sports events.",Sports & Arena
+14,Pasir Putih PIK 2,Banten,Jl. Pantai Indah Kapuk,Tangerang,Indonesia,-6.0967,106.7412,"Modern artificial white sand beach promenade popular for urban recreation.",Beach & Promenade
+15,Great Mosque of Banten,Banten,Jl. Banten Lama,Serang,Indonesia,-6.0358,106.1553,"Historic 16th-century mosque with a unique minaret resembling a pagoda.",Religious Landmark
+16,Borobudur Temple,Central Java,Jl. Badrawati,Magelang,Indonesia,-7.6079,110.2038,"World's largest 9th-century Mahayana Buddhist temple complex and UNESCO World Heritage site.",Temple & Historical
+17,Prambanan Temple,DI Yogyakarta,Jl. Raya Solo - Yogyakarta No.16,Sleman,Indonesia,-7.7520,110.4915,"9th-century Hindu temple compound dedicated to the Trimurti.",Temple & Historical
+18,Keraton Ngayogyakarta Hadiningrat,DI Yogyakarta,Jl. Rotowijayan No.1,Yogyakarta,Indonesia,-7.8053,110.3642,"Active royal palace complex of the Sultan of Yogyakarta.",Palace & Historical
+19,Malioboro Street,DI Yogyakarta,Jl. Malioboro,Yogyakarta,Indonesia,-7.7926,110.3658,"Famous vibrant shopping street known for batik markets, street food, and street art.",Shopping & Culture
+20,Taman Sari Water Castle,DI Yogyakarta,Jl. Tamanan,Yogyakarta,Indonesia,-7.8100,110.3584,"Former royal garden and bathing complex built in the mid-18th century.",Historical Site
+21,Mount Merapi,DI Yogyakarta,Desa Hargobinangun,Sleman,Indonesia,-7.5407,110.4457,"Highly active stratovolcano known for lava tour jeep adventures.",Mountain & Nature
+22,Jomblang Cave,DI Yogyakarta,Jetis,Gunungkidul,Indonesia,-7.0283,110.6384,"Vertical cave famous for its striking 'Light of Heaven' sunlight ray effect.",Cave & Nature
+23,Timang Beach,DI Yogyakarta,Purwodadi,Gunungkidul,Indonesia,-8.1764,110.6627,"Rugged beach featuring a manual wooden gondola connecting cliffs across roaring waves.",Beach & Adventure
+24,Candi Sewu,Central Java,Jl. Raya Solo - Yogyakarta,Klaten,Indonesia,-7.7439,110.4933,"8th-century Mahayana Buddhist temple complex located near Prambanan.",Temple & Historical
+25,Dieng Plateau,Central Java,Bakal,Banjarnegara,Indonesia,-7.2053,109.9078,"High-altitude volcanic complex featuring colorful lakes, hot springs, and ancient temples.",Volcanic Plateau
+26,Lawang Sewu,Central Java,Jl. Pemuda,Semarang,Indonesia,-6.9839,110.4104,"Historic Dutch colonial landmark known for its thousands of doors and stained glass.",Historical Site
+27,Sam Poo Kong Temple,Central Java,Jl. Simongan No.129,Semarang,Indonesia,-6.9962,110.3981,"Oldest Chinese temple in Semarang established by Admiral Zheng He.",Religious Landmark
+28,Mount Sumbing,Central Java,Kaliangkrik,Magelang,Indonesia,-7.3842,110.0700,"Active stratovolcano popular among mountain trekkers for its scenic crater views.",Mountain & Nature
+29,Mendut Temple,Central Java,Jl. Sumberrejo,Magelang,Indonesia,-7.6042,110.2300,"9th-century Buddhist temple housing a prominent three-meter seated Buddha statue.",Temple & Historical
+30,Ratu Boko Temple,DI Yogyakarta,Jl. Solo - Jogja,Sleman,Indonesia,-7.7705,110.4893,"Archaeological site situated on a plateau overlooking Prambanan and Mount Merapi.",Archaeological Site
+31,Kawah Putih,West Java,Jl. Raya Soreang Ciwidey,Bandung,Indonesia,-7.1662,107.4021,"Striking crater lake of Mount Patuha with turquoise acidic waters.",Volcanic Lake
+32,Tangkuban Perahu,West Java,Cikole,Subang,Indonesia,-6.7596,107.6097,"Active volcano crater famous for its overturned-boat shape legend and steam vents.",Mountain & Volcanic
+33,Gedung Sate,West Java,Jl. Diponegoro No.22,Bandung,Indonesia,-6.9025,107.6186,"Neo-classical Dutch colonial building serving as the seat of West Java governor.",Historical Site
+34,Saung Angklung Udjo,West Java,Jl. Pahlawan No.118,Bandung,Indonesia,-6.8978,107.6548,"Cultural center dedicated to preserving traditional bamboo music and Angklung art.",Cultural Center
+35,Tebing Keraton,West Java,Ciburial,Bandung,Indonesia,-6.8339,107.6636,"Scenic cliff lookout offering breathtaking views over the Juanda Forest Park.",Nature & Lookout
+36,Bogor Botanical Gardens,West Java,Jl. Ir. H. Juanda No.13,Bogor,Indonesia,-6.5976,106.7996,"Historic botanical garden established in 1817 housing thousands of plant species.",Botanical Garden
+37,Mount Bromo,East Java,Ngadisari,Probolinggo,Indonesia,-7.9425,112.9530,"Famous active volcano situated inside the Bromo Tengger Semeru National Park caldera.",Mountain & Volcanic
+38,Ijen Crater,East Java,Tamansari,Banyuwangi,Indonesia,-8.0580,114.2423,"Volcanic crater known for its blue sulfur fire phenomenon and turquoise lake.",Volcanic Lake & Nature
+39,Tumpak Sewu Waterfall,East Java,Sidomulyo,Lumajang,Indonesia,-8.2303,112.9174,"Majestic semi-circular curtain waterfall reminiscent of Niagara Falls.",Waterfall
+40,Suramadu Bridge,East Java,Jl. Tambak Wedi No.1,Surabaya,Indonesia,-7.1856,112.7834,"Cable-stayed bridge connecting Java and Madura island across the Madura Strait.",Bridge & Landmark
+41,House of Sampoerna,East Java,Taman Sampoerna No.6,Surabaya,Indonesia,-7.2307,112.7341,"Dutch colonial heritage building turned into a clove cigarette museum and gallery.",Museum
+42,Madakaripura Waterfall,East Java,Sapih,Probolinggo,Indonesia,-7.8542,113.0125,"Spectacular deep canyon waterfall associated with Majapahit prime minister Gajah Mada.",Waterfall
+43,Baluran National Park,East Java,Wonorejo,Situbondo,Indonesia,-7.8500,114.3833,"Nature reserve nicknamed 'Africa of Java' famous for its Bekol savanna landscape.",National Park
+44,Mount Semeru,East Java,Pasrujambe,Lumajang,Indonesia,-8.1080,112.9220,"Highest peak in Java and active stratovolcano popular among experienced hikers.",Mountain & Nature
+45,Jatim Park 1,East Java,Jl. Kartini No.2,Batu,Indonesia,-7.8845,112.5258,"Popular theme park combining science exhibits, cultural replicas, and thrill rides.",Theme Park
+46,Uluwatu Temple,Bali,Pecatu,Badung,Indonesia,-8.8291,115.0849,"Balinese sea temple perched on a steep cliff with Kecak dance performances.",Temple & Cultural
+47,Tanah Lot Temple,Bali,Beraban,Tabanan,Indonesia,-8.6212,115.0868,"Ancient Hindu shrine set on an offshore rock formation famous for sunset views.",Temple & Scenic
+48,Tegallalang Rice Terraces,Bali,Tegallalang,Gianyar,Indonesia,-8.4312,115.2792,"Iconic stepped emerald green rice paddies applying traditional subak irrigation.",Nature & Agriculture
+49,Sacred Monkey Forest Sanctuary,Bali,Jl. Monkey Forest,Gianyar,Indonesia,-8.5194,115.2606,"Natural forest sanctuary home to hundreds of macaques and ancient temples.",Wildlife & Sacred Site
+50,Besakih Temple,Bali,Besakih,Karangasem,Indonesia,-8.3739,115.4522,"The 'Mother Temple' of Bali, an extensive complex on the slopes of Mount Agung.",Temple & Cultural
+51,Mount Batur,Bali,Kintamani,Bangli,Indonesia,-8.2421,115.3752,"Active volcano popular for sunrise treks and panoramic views over Lake Batur.",Mountain & Volcanic
+52,Ulun Danu Beratan Temple,Bali,Candikuning,Tabanan,Indonesia,-8.2752,115.1668,"Picturesque water temple floating on Lake Beratan in the central highlands.",Temple & Scenic
+53,Kuta Beach,Bali,Jl. Pantai Kuta,Badung,Indonesia,-8.7185,115.1686,"World-famous sandy beach popular for surfing, vibrant nightlife, and sunsets.",Beach & Resort
+54,Nusa Penida (Kelingking Beach),Bali,Bunga Mekar,Klungkung,Indonesia,-8.7505,115.4749,"Dramatic cliff-side beach shaped like a T-Rex head on Nusa Penida island.",Beach & Cliff
+55,Tirta Empul Temple,Bali,Manukaya,Gianyar,Indonesia,-8.4151,115.2872,"Hindu water temple famous for its holy spring water used for ritual purification.",Temple & Cultural
+56,Garuda Wisnu Kencana Cultural Park,Bali,Ungasan,Badung,Indonesia,-8.8104,115.1676,"Cultural park featuring a massive 122-meter statue of Lord Vishnu riding Garuda.",Cultural Landmark
+57,Campuhan Ridge Walk,Bali,Jl. Raya Campuhan,Gianyar,Indonesia,-8.5036,115.2547,"Scenic hiking trail over a lush green river valley near Ubud.",Nature & Trail
+58,Sekumpul Waterfall,Bali,Sawan,Buleleng,Indonesia,-8.1742,115.1822,"Cluster of tall roaring waterfalls nestled deep in northern Bali jungle.",Waterfall
+59,Mount Rinjani,West Nusa Tenggara,Sembalun,East Lombok,Indonesia,-8.4113,116.4573,"Massive active volcano featuring the Segara Anak crater lake.",Mountain & Trekking
+60,Gili Trawangan,West Nusa Tenggara,Gili Indah,North Lombok,Indonesia,-8.3503,116.0392,"Popular motor-free island known for scuba diving, beach clubs, and clear waters.",Island & Beach
+61,Pink Beach Komodo,East Nusa Tenggara,Sekotong,West Manggarai,Indonesia,-8.6019,119.5208,"Unique beach with pinkish sand created by microscopic red coral fragments.",Beach & Nature
+62,Komodo National Park,East Nusa Tenggara,Komodo,West Manggarai,Indonesia,-8.5420,119.4835,"UNESCO site home to the giant Komodo dragon, rich marine life, and islands.",National Park & Wildlife
+63,Mount Kelimutu,East Nusa Tenggara,Pemo,Ende,Indonesia,-8.7642,121.8178,"Volcano famous for three tri-colored crater lakes that periodically change colors.",Volcanic Lakes
+64,Padar Island,East Nusa Tenggara,Komodo,West Manggarai,Indonesia,-8.6534,119.5702,"Rugged volcanic island famous for its iconic panoramic multi-bay viewpoint.",Scenic Viewpoint
+65,Mandalika Circuit,West Nusa Tenggara,Kuta,Central Lombok,Indonesia,-8.8953,116.3023,"International street circuit host of MotoGP races along the Lombok coast.",Sports & Arena
+66,Lake Toba,North Sumatra,Samosir,Toba Samosir,Indonesia,-2.6845,98.8756,"World's largest volcanic lake formed by a supervolcanic eruption 74,000 years ago.",Lake & Nature
+67,Samosir Island,North Sumatra,Simanindo,Samosir,Indonesia,-2.6167,98.7167,"Large island in the middle of Lake Toba, the heartland of Batak culture.",Island & Culture
+68,Maimun Palace,North Sumatra,Jl. Brigjend Katamso No.232,Medan,Indonesia,-3.5752,98.6838,"Royal palace of the Sultanate of Deli featuring Malay and Islamic architecture.",Palace & Historical
+69,Sipiso-piso Waterfall,North Sumatra,Tongging,Karo,Indonesia,-2.9168,98.5303,"Plunge waterfall dropping 120 meters into Lake Toba gorge.",Waterfall
+70,Jam Gadang (Bukittinggi Clock),West Sumatra,Jl. Istana,Bukittinggi,Indonesia,-0.3052,100.3694,"Historic clock tower symbol of Bukittinggi built during the Dutch colonial era.",Landmark
+71,Sianok Canyon,West Sumatra,Taman Panorama,Bukittinggi,Indonesia,-0.3078,100.3601,"Steep valley gorge surrounded by green cliffs near Bukittinggi.",Canyon & Nature
+72,Pagaruyung Palace,West Sumatra,Pagaruyung,Tanah Datar,Indonesia,-0.4712,100.6420,"Grand reconstructed royal palace showing traditional Rumah Gadang architecture.",Cultural & Historical
+73,Mentawai Islands,West Sumatra,Siberut,Mentawai,Indonesia,-1.9167,99.1333,"Chain of oceanic islands famed for world-class surf waves and indigenous culture.",Island & Surfing
+74,Baiturrahman Grand Mosque,Aceh,Jl. Mohd. Jam No.1,Banda Aceh,Indonesia,5.5536,95.3172,"19th-century royal mosque that miraculously survived the 2004 tsunami.",Religious Landmark
+75,Aceh Tsunami Museum,Aceh,Jl. Sultan Iskandar Muda,Banda Aceh,Indonesia,5.5480,95.3150,"Memorial museum serving as a reminder of the 2004 disaster and educational center.",Museum & Memorial
+76,Mount Sinabung,North Sumatra,Simpang Empat,Karo,Indonesia,3.1700,98.3920,"Active stratovolcano located in the Karo plateau.",Volcanic Mountain
+77,Way Kambas National Park,Lampung,Labuhan Ratu,East Lampung,Indonesia,-5.0222,105.7761,"National park protected habitat for Sumatran elephants and rhinos.",Wildlife & National Park
+78,Ampera Bridge,South Sumatra,Jl. Jend. Sudirman,Palembang,Indonesia,-2.9912,104.7634,"Iconic vertical-lift bridge spanning the Musi River in Palembang.",Bridge & Landmark
+79,Tanjung Tinggi Beach,Bangka Belitung,Sijuk,Belitung,Indonesia,-2.5761,107.6322,"Beach famous for massive granite rock formations and turquoise waters.",Beach & Scenic
+80,Weh Island (Pulau Weh),Aceh,Iboih,Sabang,Indonesia,5.8753,95.3283,"Northernmost island of Indonesia famous for diving, coral reefs, and KM 0 monument.",Island & Diving
+81,Tanjung Puting National Park,Central Kalimantan,Kumai,West Kotawaringin,Indonesia,-2.8028,111.9250,"UNESCO biosphere reserve famous for its wild orangutan rehabilitation center.",Wildlife & National Park
+82,Derawan Islands,East Kalimantan,Derawan,Berau,Indonesia,2.2858,118.2436,"Archipelago known for stingless jellyfish lake, sea turtles, and diving.",Island & Marine Life
+83,Nusantara Capital City Zero Point,East Kalimantan,Sepaku,Penajam Paser Utara,Indonesia,-0.9631,116.7025,"Central monument marking the foundation of Indonesia's new national capital.",Landmark & Urban
+84,Mahakam River,East Kalimantan,Kutai Kartanegara,Samarinda,Indonesia,-0.5022,117.1536,"Second longest river in Indonesia home to freshwater Irrawaddy dolphins.",River & Ecosystem
+85,Kete Kesu Village,South Sulawesi,Bonoran,Toraja Utara,Indonesia,-2.9881,119.8978,"Ancient village showcasing Tongkonan houses and cliff burial grounds.",Cultural Heritage
+86,Losari Beach,South Sulawesi,Jl. Penghibur,Makassar,Indonesia,-5.1432,119.4074,"Iconic urban waterfront famous for sunsets and Makassar culinary treats.",Beach & Waterfront
+87,Fort Rotterdam,South Sulawesi,Jl. Ujung Pandang,Makassar,Indonesia,-5.1336,119.4052,"17th-century Dutch fortress built over a former Gowa Kingdom fort.",Historical Site
+88,Bunaken National Marine Park,North Sulawesi,Bunaken,Manado,Indonesia,1.6212,124.7602,"World-famous marine park with drop-off coral walls and rich biodiversity.",Marine Park & Diving
+89,Tangkoko Nature Reserve,North Sulawesi,Batu Putih,Bitung,Indonesia,1.5622,125.1558,"Rainforest sanctuary home to tarsiers, black macaques, and hornbills.",Wildlife Reserve
+90,Wakatobi National Park,Southeast Sulawesi,Wangi-Wangi,Wakatobi,Indonesia,-5.3218,123.5950,"Marine national park with pristine coral reefs and Bajau sea gypsy villages.",Marine Park & Diving
+91,Raja Ampat Islands,West Papua,Waigeo,Raja Ampat,Indonesia,-0.2333,130.5167,"Global epicenter of marine biodiversity featuring karst island clusters.",Island & Marine Sanctuary
+92,Baliem Valley,Papua,Wamena,Jayawijaya,Indonesia,-4.0989,138.9442,"Highland valley inhabited by Dani tribes maintaining traditional customs.",Cultural & Nature
+93,Lake Sentani,Papua,Sentani,Jayapura,Indonesia,-2.6022,140.5218,"Large freshwater lake dotted with stilt-house villages under Cyclops mountains.",Lake & Culture
+94,Pasir Panjang Beach (Kei Islands),Maluku,Ngilngof,Southeast Maluku,Indonesia,-5.6428,132.6133,"Beach boasting some of the softest flour-like white sand in the world.",Beach & Island
+95,Banda Neira (Banda Islands),Maluku,Banda Neira,Central Maluku,Indonesia,-4.5231,129.8981,"Historic Nutmeg Islands featuring Fort Belgica and colonial history.",Historical & Island
+96,Lore Lindu National Park,Central Sulawesi,Wuasa,Poso,Indonesia,-1.3333,120.1333,"UNESCO biosphere reserve known for ancient megalithic statues and rainforests.",National Park & Archaeology
+97,Lake Kakaban,East Kalimantan,Kakaban,Berau,Indonesia,2.1472,118.5286,"Marine lake famous for swimming with non-stinging golden jellyfish.",Nature & Lake
+98,Puncak Jaya (Carstensz Pyramid),Central Papua,Tembagapura,Mimika,Indonesia,-4.0853,137.1583,"Highest peak in Indonesia and Oceania featuring tropical equatorial glaciers.",Mountain & Glaciers
+99,Agats Asmat Region,South Papua,Agats,Asmat,Indonesia,-5.5412,138.1389,"Coastal mangrove region renowned for indigenous woodcarving art and culture.",Cultural & Nature
+100,Morotai Island,North Maluku,Daruba,Morotai,Indonesia,2.0522,128.2831,"Historic WWII Allied base island with sunken airship wrecks and white beaches.",Island & History
