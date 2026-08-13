@@ -659,40 +659,43 @@ export const AccidentScannerModal: React.FC<AccidentScannerModalProps> = ({
         {activeTab === 'history' && (
           <div className="space-y-3 overflow-y-auto pr-1 flex-1">
             {/* Filter Header Bar */}
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 bg-slate-50 p-2.5 rounded border border-slate-200">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 bg-slate-50 p-3 rounded-lg border border-slate-200 shadow-xs">
               <div className="flex items-center gap-2">
-                <Filter className="w-4 h-4 text-blue-600" />
-                <span className="text-xs font-bold text-slate-800">Filter Feed by City / Saved Alarm:</span>
+                <Filter className="w-4 h-4 text-blue-600 flex-shrink-0" />
+                <label htmlFor="incident-feed-city-select" className="text-xs font-bold text-slate-800">
+                  Filter Feed by City / Saved Alarm:
+                </label>
               </div>
 
-              <div className="flex flex-wrap items-center gap-1.5">
-                <button
-                  onClick={() => setFeedCityFilter('All Cities')}
-                  className={`px-2.5 py-1 text-[11px] font-bold rounded transition-colors ${
-                    feedCityFilter === 'All Cities'
-                      ? 'bg-blue-600 text-white shadow-sm'
-                      : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-100'
-                  }`}
+              <div className="flex items-center gap-2 w-full sm:w-auto">
+                <select
+                  id="incident-feed-city-select"
+                  value={feedCityFilter}
+                  onChange={(e) => setFeedCityFilter(e.target.value)}
+                  className="w-full sm:w-72 bg-white text-slate-800 text-xs font-semibold px-3 py-2 rounded-lg border border-slate-300 shadow-xs focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
                 >
-                  All Cities &amp; Saved Alarms ({accidentEvents.length})
-                </button>
+                  <option value="All Cities">
+                    🌐 All Cities &amp; Alarms ({accidentEvents.length} events)
+                  </option>
+                  {uniqueCities.map((city) => {
+                    const cityEventsCount = accidentEvents.filter((e) => e.cityName?.toLowerCase() === city.toLowerCase()).length;
+                    return (
+                      <option key={city} value={city}>
+                        📍 {city} ({cityEventsCount} incident{cityEventsCount === 1 ? '' : 's'})
+                      </option>
+                    );
+                  })}
+                </select>
 
-                {uniqueCities.map((city) => {
-                  const cityEventsCount = accidentEvents.filter((e) => e.cityName?.toLowerCase() === city.toLowerCase()).length;
-                  return (
-                    <button
-                      key={city}
-                      onClick={() => setFeedCityFilter(city)}
-                      className={`px-2 py-1 text-[11px] font-bold rounded transition-colors ${
-                        feedCityFilter === city
-                          ? 'bg-blue-600 text-white shadow-sm'
-                          : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-100'
-                      }`}
-                    >
-                      {city} ({cityEventsCount})
-                    </button>
-                  );
-                })}
+                {feedCityFilter !== 'All Cities' && (
+                  <button
+                    onClick={() => setFeedCityFilter('All Cities')}
+                    className="px-2.5 py-1.5 text-xs font-bold text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-lg transition-colors whitespace-nowrap"
+                    title="Reset to All Cities"
+                  >
+                    Reset
+                  </button>
+                )}
               </div>
             </div>
 

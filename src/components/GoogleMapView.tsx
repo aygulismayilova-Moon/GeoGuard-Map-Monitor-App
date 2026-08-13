@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { PlaceItem, MapSnapshot } from '../types';
+import { PlaceItem, MapSnapshot, HeatmapOverlayResult, HeatmapPoint } from '../types';
 import { APIProvider, Map, AdvancedMarker, Pin, InfoWindow, useMap } from '@vis.gl/react-google-maps';
 import {
   Camera,
@@ -31,16 +31,144 @@ import {
   Zap,
   Maximize2,
   Minimize2,
+  Download,
+  Square,
+  Crosshair,
+  Focus,
+  Flame,
+  Activity,
+  Sliders,
+  AlertCircle,
 } from 'lucide-react';
 import { generateSyntheticMapSnapshot, captureGoogleMapSnapshot } from '../utils/mapImageCanvas';
 import html2canvas from 'html2canvas';
 
 interface GoogleMapViewProps {
   selectedPlace: PlaceItem;
+  snapshots?: MapSnapshot[];
   hasGoogleMapsKey: boolean;
   onSnapshotCaptured: (snapshot: MapSnapshot) => void;
   onOpenApiKeyHelp: () => void;
 }
+
+// Helper to calculate approximate inspection radius for map zoom levels
+export const getInspectionRadius = (zoomLevel: number): string => {
+  if (zoomLevel >= 21) return '~10m (Micro Detail)';
+  if (zoomLevel >= 19) return '~30m (Site / Property)';
+  if (zoomLevel >= 18) return '~50m (Building Plot)';
+  if (zoomLevel >= 17) return '~100m (Street Block)';
+  if (zoomLevel >= 16) return '~200m (Neighborhood)';
+  if (zoomLevel >= 15) return '~400m (Corridor Zone)';
+  if (zoomLevel >= 14) return '~800m (District Sector)';
+  if (zoomLevel >= 13) return '~1.5km (Subregional)';
+  if (zoomLevel >= 12) return '~3km (Township)';
+  if (zoomLevel >= 10) return '~12km (Metropolitan)';
+  if (zoomLevel >= 8) return '~50km (County Area)';
+  if (zoomLevel >= 5) return '~300km (State / Region)';
+  return '> 1,000km (Continental)';
+};
+
+// Helper to format city and country cleanly without duplication
+export const formatCityCountry = (city?: string, country?: string): string => {
+  const c = (city || '').trim();
+  const cnt = (country || '').trim();
+  if (!c && !cnt) return 'Unknown Location';
+  if (!c) return cnt;
+  if (!cnt) return c;
+  if (c.toLowerCase().includes(cnt.toLowerCase())) return c;
+  return `${c}, ${cnt}`;
+};
+
+// Returns inspection radius in exact meters for perimeter box calculation
+export const getInspectionRadiusMeters = (zoomLevel: number): number => {
+  if (zoomLevel >= 21) return 10;
+  if (zoomLevel >= 20) return 20;
+  if (zoomLevel >= 19) return 30;
+  if (zoomLevel >= 18) return 50;
+  if (zoomLevel >= 17) return 100;
+  if (zoomLevel >= 16) return 200;
+  if (zoomLevel >= 15) return 400;
+  if (zoomLevel >= 14) return 800;
+  if (zoomLevel >= 13) return 1500;
+  if (zoomLevel >= 12) return 3000;
+  if (zoomLevel >= 11) return 6000;
+  if (zoomLevel >= 10) return 12000;
+  if (zoomLevel >= 8) return 50000;
+  if (zoomLevel >= 5) return 300000;
+  return 1000000;
+};
+
+// Calculates geographic LatLng bounds for perimeter box around center
+export const getInspectionBounds = (center: { lat: number; lng: number }, radiusMeters: number) => {
+  const latDelta = radiusMeters / 111000;
+  const latRad = (center.lat * Math.PI) / 180;
+  const cosLat = Math.cos(latRad);
+  const lngDelta = radiusMeters / (111000 * (Math.abs(cosLat) < 0.00001 ? 0.00001 : Math.abs(cosLat)));
+
+  return {
+    north: center.lat + latDelta,
+    south: center.lat - latDelta,
+    east: center.lng + lngDelta,
+    west: center.lng - lngDelta,
+  };
+};
+
+// React component to render a Google Maps Rectangle overlay on live map canvas
+const InspectionPerimeterRectangle: React.FC<{
+  bounds: { north: number; south: number; east: number; west: number };
+  colorTheme: 'blue' | 'emerald' | 'amber' | 'crimson';
+}> = ({ bounds, colorTheme }) => {
+  const map = useMap();
+  const rectangleRef = useRef<any>(null);
+
+  const colorConfig = useMemo(() => {
+    switch (colorTheme) {
+      case 'emerald':
+        return { stroke: '#059669', fill: '#10b981', fillOpacity: 0.03 };
+      case 'amber':
+        return { stroke: '#d97706', fill: '#f59e0b', fillOpacity: 0.03 };
+      case 'crimson':
+        return { stroke: '#dc2626', fill: '#ef4444', fillOpacity: 0.03 };
+      case 'blue':
+      default:
+        return { stroke: '#2563eb', fill: '#3b82f6', fillOpacity: 0.03 };
+    }
+  }, [colorTheme]);
+
+  useEffect(() => {
+    if (!map || !(window as any).google?.maps) return;
+
+    if (!rectangleRef.current) {
+      rectangleRef.current = new (window as any).google.maps.Rectangle({
+        map,
+        bounds,
+        strokeColor: colorConfig.stroke,
+        strokeOpacity: 0.9,
+        strokeWeight: 2,
+        fillColor: colorConfig.fill,
+        fillOpacity: colorConfig.fillOpacity,
+        clickable: false,
+      });
+    } else {
+      rectangleRef.current.setMap(map);
+      rectangleRef.current.setBounds(bounds);
+      rectangleRef.current.setOptions({
+        strokeColor: colorConfig.stroke,
+        fillColor: colorConfig.fill,
+        fillOpacity: colorConfig.fillOpacity,
+      });
+    }
+
+    return () => {
+      if (rectangleRef.current) {
+        rectangleRef.current.setMap(null);
+        rectangleRef.current = null;
+      }
+    };
+  }, [map, bounds, colorConfig]);
+
+  return null;
+};
 
 // Inner helper component to trigger map panTo and setZoom when recenter button is clicked
 const MapRecenterController: React.FC<{
@@ -62,6 +190,7 @@ const MapRecenterController: React.FC<{
 
 export const GoogleMapView: React.FC<GoogleMapViewProps> = ({
   selectedPlace,
+  snapshots = [],
   hasGoogleMapsKey,
   onSnapshotCaptured,
   onOpenApiKeyHelp,
@@ -79,6 +208,133 @@ export const GoogleMapView: React.FC<GoogleMapViewProps> = ({
   const [captureNotes, setCaptureNotes] = useState<string>('');
   const [captureDate, setCaptureDate] = useState<string>(new Date().toISOString().split('T')[0]);
 
+  // Snapshots for selected place
+  const placeSnapshots = useMemo(() => {
+    if (!snapshots || snapshots.length === 0) return [];
+    return snapshots.filter((s) => s.placeId === selectedPlace.id);
+  }, [snapshots, selectedPlace.id]);
+
+  // Gemini Heatmap Overlay State
+  const [showHeatmapOverlay, setShowHeatmapOverlay] = useState<boolean>(false);
+  const [heatmapSnapshotAId, setHeatmapSnapshotAId] = useState<string>('');
+  const [heatmapSnapshotBId, setHeatmapSnapshotBId] = useState<string>('');
+  const [isComputingHeatmap, setIsComputingHeatmap] = useState<boolean>(false);
+  const [heatmapResult, setHeatmapResult] = useState<HeatmapOverlayResult | null>(null);
+  const [heatmapError, setHeatmapError] = useState<string | null>(null);
+  const [heatmapIntensityMultiplier, setHeatmapIntensityMultiplier] = useState<number>(1.0);
+  const [heatmapOpacity, setHeatmapOpacity] = useState<number>(0.85);
+  const [heatmapColorPalette, setHeatmapColorPalette] = useState<'thermal' | 'cyber' | 'crimson' | 'spectral'>('thermal');
+  const [selectedHotspot, setSelectedHotspot] = useState<HeatmapPoint | null>(null);
+
+  // Synchronize snapshot selection defaults when placeSnapshots change
+  useEffect(() => {
+    if (placeSnapshots.length >= 2) {
+      setHeatmapSnapshotAId(placeSnapshots[0].id);
+      setHeatmapSnapshotBId(placeSnapshots[placeSnapshots.length - 1].id);
+    } else if (placeSnapshots.length === 1) {
+      setHeatmapSnapshotAId(placeSnapshots[0].id);
+      setHeatmapSnapshotBId(placeSnapshots[0].id);
+    } else {
+      setHeatmapSnapshotAId('');
+      setHeatmapSnapshotBId('');
+    }
+    setHeatmapResult(null);
+    setHeatmapError(null);
+  }, [selectedPlace.id, placeSnapshots.length]);
+
+  // Handle computing Gemini Heatmap Overlay
+  const handleComputeHeatmap = async (snapAIdOverride?: string, snapBIdOverride?: string) => {
+    const snapAId = snapAIdOverride || heatmapSnapshotAId;
+    const snapBId = snapBIdOverride || heatmapSnapshotBId;
+
+    let snapA = placeSnapshots.find((s) => s.id === snapAId);
+    let snapB = placeSnapshots.find((s) => s.id === snapBId);
+
+    // Fallback image generation if snapshot objects not directly present
+    if (!snapA) {
+      const defaultUrl = generateSyntheticMapSnapshot({
+        placeName: selectedPlace.place_name,
+        eventType: 'Baseline',
+        dateText: 'Baseline Snapshot',
+        lat: selectedPlace.latitude,
+        lng: selectedPlace.longitude,
+        zoom,
+        mapType,
+      });
+      snapA = {
+        id: `synth-a-${selectedPlace.id}`,
+        placeId: selectedPlace.id,
+        capturedAt: new Date(Date.now() - 30 * 86400000).toISOString(),
+        dateLabel: 'Baseline State',
+        isoDate: new Date(Date.now() - 30 * 86400000).toISOString().split('T')[0],
+        imageUrl: defaultUrl,
+        zoomLevel: zoom,
+        mapType,
+        lat: selectedPlace.latitude,
+        lng: selectedPlace.longitude,
+      };
+    }
+
+    if (!snapB) {
+      const currentUrl = generateSyntheticMapSnapshot({
+        placeName: selectedPlace.place_name,
+        eventType: 'Construction',
+        dateText: 'Current Status',
+        lat: selectedPlace.latitude,
+        lng: selectedPlace.longitude,
+        zoom,
+        mapType,
+      });
+      snapB = {
+        id: `synth-b-${selectedPlace.id}`,
+        placeId: selectedPlace.id,
+        capturedAt: new Date().toISOString(),
+        dateLabel: 'Current Inspection View',
+        isoDate: new Date().toISOString().split('T')[0],
+        imageUrl: currentUrl,
+        zoomLevel: zoom,
+        mapType,
+        lat: selectedPlace.latitude,
+        lng: selectedPlace.longitude,
+      };
+    }
+
+    setIsComputingHeatmap(true);
+    setHeatmapError(null);
+
+    try {
+      const res = await fetch('/api/gemini/generate-heatmap', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          placeId: selectedPlace.id,
+          placeName: selectedPlace.place_name,
+          latitude: selectedPlace.latitude,
+          longitude: selectedPlace.longitude,
+          zoomLevel: zoom,
+          dateA: snapA.dateLabel || snapA.isoDate,
+          dateB: snapB.dateLabel || snapB.isoDate,
+          snapshotAId: snapA.id,
+          snapshotBId: snapB.id,
+          imageA: snapA.imageUrl,
+          imageB: snapB.imageUrl,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to compute Gemini Heatmap Overlay');
+      }
+
+      setHeatmapResult(data);
+    } catch (err: any) {
+      console.error('Error computing Gemini heatmap overlay:', err);
+      setHeatmapError(err.message || 'Error executing Gemini Heatmap analysis.');
+    } finally {
+      setIsComputingHeatmap(false);
+    }
+  };
+
   // Automated Snapshot Capture Configuration State
   const [autoCaptureEnabled, setAutoCaptureEnabled] = useState<boolean>(false);
   const [autoCaptureIntervalSec, setAutoCaptureIntervalSec] = useState<number>(30); // Default 30s interval
@@ -94,11 +350,20 @@ export const GoogleMapView: React.FC<GoogleMapViewProps> = ({
     eventType: string;
   } | null>(null);
 
+  // Visual Inspection Perimeter Rectangle State
+  const [showPerimeterRectangle, setShowPerimeterRectangle] = useState<boolean>(true);
+  const [perimeterColorTheme, setPerimeterColorTheme] = useState<'blue' | 'emerald' | 'amber' | 'crimson'>('blue');
+  const [showPerimeterCornerTags, setShowPerimeterCornerTags] = useState<boolean>(true);
+
   // Current map center state (supports panning via keyboard or controls)
   const [currentCenter, setCurrentCenter] = useState<{ lat: number; lng: number }>({
     lat: selectedPlace.latitude,
     lng: selectedPlace.longitude,
   });
+
+  // Computed Inspection Perimeter Radius in Meters & Geographic Bounds
+  const radiusMeters = useMemo(() => getInspectionRadiusMeters(zoom), [zoom]);
+  const perimeterBounds = useMemo(() => getInspectionBounds(currentCenter, radiusMeters), [currentCenter, radiusMeters]);
 
   const [mapsError, setMapsError] = useState<boolean>(false);
   const mapContainerRef = useRef<HTMLDivElement>(null);
@@ -253,6 +518,13 @@ export const GoogleMapView: React.FC<GoogleMapViewProps> = ({
         mapType: mapType,
         eventType: activeOverlay as any,
         dateText: `Auto-Captured ${timeStr} (${activeOverlay})`,
+        perimeterOptions: {
+          show: showPerimeterRectangle,
+          radiusMeters: radiusMeters,
+          colorTheme: perimeterColorTheme,
+          bounds: perimeterBounds,
+          showCornerTags: showPerimeterCornerTags,
+        },
       });
 
       const newSnap: MapSnapshot = {
@@ -325,8 +597,8 @@ export const GoogleMapView: React.FC<GoogleMapViewProps> = ({
     autoCaptureEventType,
   ]);
 
-  // Handle taking a manual map snapshot
-  const handleConfirmSnapshot = async () => {
+  // Handle taking a manual map snapshot (with optional simultaneous download)
+  const handleConfirmSnapshot = async (andDownload = false) => {
     setIsCapturing(true);
 
     try {
@@ -340,6 +612,13 @@ export const GoogleMapView: React.FC<GoogleMapViewProps> = ({
         mapType: mapType,
         eventType: simulatedEventType,
         dateText: `${captureDate} - ${simulatedEventType}`,
+        perimeterOptions: {
+          show: showPerimeterRectangle,
+          radiusMeters: radiusMeters,
+          colorTheme: perimeterColorTheme,
+          bounds: perimeterBounds,
+          showCornerTags: showPerimeterCornerTags,
+        },
       });
 
       const formattedDateLabel = new Date(captureDate).toLocaleDateString('en-US', {
@@ -364,6 +643,17 @@ export const GoogleMapView: React.FC<GoogleMapViewProps> = ({
       };
 
       onSnapshotCaptured(newSnap);
+
+      if (andDownload) {
+        const link = document.createElement('a');
+        link.href = imageDataUrl;
+        const cleanName = selectedPlace.place_name.replace(/\s+/g, '_');
+        link.download = `GeoGuard_Snapshot_${cleanName}_${captureDate}_${simulatedEventType}.png`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      }
+
       setShowCaptureModal(false);
       setCaptureNotes('');
     } catch (err) {
@@ -396,7 +686,7 @@ export const GoogleMapView: React.FC<GoogleMapViewProps> = ({
                 )}
               </div>
               <p className={`text-[11px] font-medium ${isFullscreen ? 'text-slate-400' : 'text-slate-500'}`}>
-                {selectedPlace.street}, {selectedPlace.city}, {selectedPlace.country} ({selectedPlace.latitude.toFixed(4)}° N, {selectedPlace.longitude.toFixed(4)}° E)
+                {formatCityCountry(selectedPlace.city, selectedPlace.country)} ({selectedPlace.latitude.toFixed(4)}° N, {selectedPlace.longitude.toFixed(4)}° E)
               </p>
             </div>
           </div>
@@ -476,6 +766,28 @@ export const GoogleMapView: React.FC<GoogleMapViewProps> = ({
             </button>
 
             <button
+              onClick={() => {
+                const nextState = !showHeatmapOverlay;
+                setShowHeatmapOverlay(nextState);
+                if (nextState && !heatmapResult) {
+                  handleComputeHeatmap();
+                }
+              }}
+              className={`inline-flex items-center gap-1.5 px-3 py-2 font-bold text-xs rounded shadow transition-all ${
+                showHeatmapOverlay
+                  ? 'bg-gradient-to-r from-amber-500 to-red-600 hover:from-amber-600 hover:to-red-700 text-white ring-2 ring-red-400/50'
+                  : 'bg-slate-900 hover:bg-slate-800 text-white shadow-xs'
+              }`}
+              title="Toggle Gemini AI Change Detection Heatmap Overlay directly on map"
+            >
+              <Flame className={`w-4 h-4 ${showHeatmapOverlay ? 'text-yellow-200 animate-pulse' : 'text-amber-400'}`} />
+              <span>Heatmap Overlay</span>
+              <span className={`text-[10px] font-mono px-1.5 py-0.2 rounded font-extrabold ${showHeatmapOverlay ? 'bg-black/30 text-yellow-100' : 'bg-slate-800 text-slate-300'}`}>
+                {showHeatmapOverlay ? 'ON' : 'OFF'}
+              </span>
+            </button>
+
+            <button
               onClick={() => setShowCaptureModal(true)}
               className="inline-flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded shadow transition-colors"
             >
@@ -484,6 +796,187 @@ export const GoogleMapView: React.FC<GoogleMapViewProps> = ({
             </button>
           </div>
         </div>
+
+        {/* Dedicated Gemini Heatmap Overlay Control Panel */}
+        {showHeatmapOverlay && (
+          <div className="bg-slate-900 text-slate-100 p-3 rounded-lg border border-red-500/40 shadow-xl flex flex-col gap-3 transition-all animate-in fade-in slide-in-from-top-2 duration-200">
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 border-b border-slate-800 pb-2.5">
+              <div className="flex items-center gap-2">
+                <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-amber-500 to-red-600 flex items-center justify-center shadow-md">
+                  <Flame className="w-4 h-4 text-yellow-200 animate-pulse" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h4 className="text-xs font-black uppercase tracking-wider text-amber-300">Gemini Heatmap Overlay</h4>
+                    <span className="px-2 py-0.2 text-[10px] font-mono font-bold bg-red-950 text-red-300 border border-red-800 rounded flex items-center gap-1">
+                      <span className="w-1.5 h-1.5 rounded-full bg-red-400 animate-ping" />
+                      <span>SPATIAL AI DETECTOR</span>
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-slate-400">
+                    Highlights physical changes between snapshot pairs directly on map coordinates.
+                  </p>
+                </div>
+              </div>
+
+              {/* Snapshot Pair Selection & Compute Action */}
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="flex items-center gap-1 bg-slate-800/90 px-2 py-1 rounded border border-slate-700 text-xs font-medium">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase">Snap A:</span>
+                  <select
+                    value={heatmapSnapshotAId}
+                    onChange={(e) => {
+                      setHeatmapSnapshotAId(e.target.value);
+                      handleComputeHeatmap(e.target.value, heatmapSnapshotBId);
+                    }}
+                    className="bg-slate-900 text-white text-[11px] font-semibold border border-slate-700 rounded px-1.5 py-0.5 focus:outline-none focus:border-amber-400"
+                  >
+                    {placeSnapshots.length === 0 ? (
+                      <option value="">Baseline (Auto)</option>
+                    ) : (
+                      placeSnapshots.map((s, idx) => (
+                        <option key={s.id} value={s.id}>
+                          Snap #{idx + 1}: {s.dateLabel}
+                        </option>
+                      ))
+                    )}
+                  </select>
+                </div>
+
+                <span className="text-slate-500 font-bold text-xs">vs</span>
+
+                <div className="flex items-center gap-1 bg-slate-800/90 px-2 py-1 rounded border border-slate-700 text-xs font-medium">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase">Snap B:</span>
+                  <select
+                    value={heatmapSnapshotBId}
+                    onChange={(e) => {
+                      setHeatmapSnapshotBId(e.target.value);
+                      handleComputeHeatmap(heatmapSnapshotAId, e.target.value);
+                    }}
+                    className="bg-slate-900 text-white text-[11px] font-semibold border border-slate-700 rounded px-1.5 py-0.5 focus:outline-none focus:border-amber-400"
+                  >
+                    {placeSnapshots.length === 0 ? (
+                      <option value="">Current View (Auto)</option>
+                    ) : (
+                      placeSnapshots.map((s, idx) => (
+                        <option key={s.id} value={s.id}>
+                          Snap #{idx + 1}: {s.dateLabel}
+                        </option>
+                      ))
+                    )}
+                  </select>
+                </div>
+
+                <button
+                  onClick={() => handleComputeHeatmap()}
+                  disabled={isComputingHeatmap}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-amber-500 hover:bg-amber-600 disabled:opacity-50 text-slate-950 font-extrabold text-xs rounded shadow transition-all cursor-pointer"
+                >
+                  {isComputingHeatmap ? <RefreshCw className="w-3.5 h-3.5 animate-spin text-slate-950" /> : <Sparkles className="w-3.5 h-3.5 text-slate-950" />}
+                  <span>{isComputingHeatmap ? 'Computing...' : 'Compute Heatmap'}</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Heatmap Customization & Visualization Parameters */}
+            <div className="flex flex-wrap items-center justify-between gap-3 text-xs">
+              {/* Palette Selector */}
+              <div className="flex items-center gap-1.5 bg-slate-800/80 px-2.5 py-1 rounded-md border border-slate-700">
+                <span className="text-[10px] font-extrabold text-slate-400 uppercase">Palette:</span>
+                {[
+                  { id: 'thermal', label: 'Thermal Fire', color: 'from-yellow-400 via-red-500 to-purple-800' },
+                  { id: 'cyber', label: 'Cyber Neon', color: 'from-cyan-400 via-emerald-500 to-fuchsia-600' },
+                  { id: 'crimson', label: 'Hazard Red', color: 'from-amber-400 via-red-600 to-red-950' },
+                  { id: 'spectral', label: 'Spectral', color: 'from-lime-400 via-orange-500 to-rose-700' },
+                ].map((pal) => (
+                  <button
+                    key={pal.id}
+                    type="button"
+                    onClick={() => setHeatmapColorPalette(pal.id as any)}
+                    className={`px-2 py-0.5 rounded text-[10px] font-bold flex items-center gap-1 transition-all ${
+                      heatmapColorPalette === pal.id
+                        ? 'bg-slate-700 text-white border border-amber-400/80 shadow-xs'
+                        : 'text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    <span className={`w-2.5 h-2.5 rounded-full bg-gradient-to-r ${pal.color}`} />
+                    <span>{pal.label}</span>
+                  </button>
+                ))}
+              </div>
+
+              {/* Radius Intensity Multiplier */}
+              <div className="flex items-center gap-2 bg-slate-800/80 px-2.5 py-1 rounded-md border border-slate-700">
+                <span className="text-[10px] font-extrabold text-slate-400 uppercase">Glow Radius:</span>
+                {[0.7, 1.0, 1.5, 2.0].map((mult) => (
+                  <button
+                    key={mult}
+                    type="button"
+                    onClick={() => setHeatmapIntensityMultiplier(mult)}
+                    className={`px-1.5 py-0.5 rounded text-[10px] font-mono font-bold transition-colors ${
+                      heatmapIntensityMultiplier === mult
+                        ? 'bg-amber-500 text-slate-950 font-black'
+                        : 'text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    {mult}x
+                  </button>
+                ))}
+              </div>
+
+              {/* Opacity Slider */}
+              <div className="flex items-center gap-2 bg-slate-800/80 px-2.5 py-1 rounded-md border border-slate-700">
+                <span className="text-[10px] font-extrabold text-slate-400 uppercase">Opacity:</span>
+                <input
+                  type="range"
+                  min={0.2}
+                  max={1.0}
+                  step={0.05}
+                  value={heatmapOpacity}
+                  onChange={(e) => setHeatmapOpacity(Number(e.target.value))}
+                  className="w-20 h-1.5 bg-slate-700 rounded appearance-none cursor-pointer accent-amber-400"
+                />
+                <span className="text-[10px] font-mono font-bold text-amber-300">{Math.round(heatmapOpacity * 100)}%</span>
+              </div>
+            </div>
+
+            {/* Heatmap Findings Summary Badge */}
+            {heatmapResult && (
+              <div className="bg-slate-950/80 p-2.5 rounded-md border border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
+                <div className="flex items-start gap-2">
+                  <Activity className="w-4 h-4 text-amber-400 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <div className="flex items-center gap-2 font-bold text-white">
+                      <span>{heatmapResult.points.length} Spatial Hotspots Detected</span>
+                      <span className="text-slate-500">•</span>
+                      <span className="text-amber-400 font-mono">Max Intensity: {Math.round(heatmapResult.maxIntensity * 100)}%</span>
+                    </div>
+                    <p className="text-[11px] text-slate-300 font-medium mt-0.5 leading-tight">
+                      {heatmapResult.overallSummary}
+                    </p>
+                  </div>
+                </div>
+
+                {selectedHotspot && (
+                  <button
+                    onClick={() => setSelectedHotspot(null)}
+                    className="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 text-[10px] font-mono font-bold rounded border border-slate-700 flex items-center gap-1 self-start sm:self-auto"
+                  >
+                    <X className="w-3 h-3 text-slate-400" />
+                    <span>Clear Hotspot Focus</span>
+                  </button>
+                )}
+              </div>
+            )}
+
+            {heatmapError && (
+              <div className="bg-red-950/80 text-red-200 p-2 rounded-md border border-red-700 text-xs flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 text-red-400 flex-shrink-0" />
+                <span>{heatmapError}</span>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* View Style Control Selector & Change Detection Guidance */}
         <div className={`border rounded-lg p-2.5 flex flex-col md:flex-row md:items-center justify-between gap-3 shadow-xs ${isFullscreen ? 'bg-slate-800 border-slate-700 text-slate-100' : 'bg-white border-slate-200'}`}>
@@ -582,6 +1075,161 @@ export const GoogleMapView: React.FC<GoogleMapViewProps> = ({
             )}
           </div>
         </div>
+
+        {/* Dedicated Inspection Radius & Precision Zoom Control Slider */}
+        <div className={`border rounded-lg p-2.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs ${isFullscreen ? 'bg-slate-800 border-slate-700 text-slate-100' : 'bg-slate-50 border-slate-200'}`}>
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="flex items-center gap-1.5">
+              <SlidersHorizontal className="w-4 h-4 text-blue-600 flex-shrink-0" />
+              <span className={`text-xs font-extrabold uppercase tracking-wider ${isFullscreen ? 'text-slate-200' : 'text-slate-800'}`}>
+                Inspection Radius &amp; Zoom:
+              </span>
+            </div>
+
+            {/* Precision Zoom Slider Control */}
+            <div className="flex items-center gap-2 bg-white px-2 py-1 rounded-md border border-slate-200 shadow-xs">
+              <button
+                type="button"
+                onClick={() => setZoom(Math.max(2, zoom - 1))}
+                className="p-1 hover:bg-slate-100 rounded text-slate-600 border border-slate-200 transition-colors"
+                title="Zoom Out (-)"
+              >
+                <ZoomOut className="w-3.5 h-3.5" />
+              </button>
+
+              <input
+                type="range"
+                min={2}
+                max={21}
+                step={1}
+                value={zoom}
+                onChange={(e) => setZoom(Number(e.target.value))}
+                className="w-28 sm:w-40 h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-blue-600 focus:outline-none"
+                title={`Zoom Level: ${zoom}x`}
+              />
+
+              <button
+                type="button"
+                onClick={() => setZoom(Math.min(21, zoom + 1))}
+                className="p-1 hover:bg-slate-100 rounded text-slate-600 border border-slate-200 transition-colors"
+                title="Zoom In (+)"
+              >
+                <ZoomIn className="w-3.5 h-3.5" />
+              </button>
+            </div>
+
+            {/* Quick Preset Zoom Radius Buttons */}
+            <div className="hidden lg:flex items-center gap-1 border-l border-slate-300/60 pl-3">
+              <span className={`text-[10px] font-bold uppercase mr-1 ${isFullscreen ? 'text-slate-400' : 'text-slate-500'}`}>Presets:</span>
+              {[
+                { label: 'Site (18x)', val: 18 },
+                { label: 'Block (16x)', val: 16 },
+                { label: 'District (14x)', val: 14 },
+                { label: 'Metro (11x)', val: 11 },
+              ].map((preset) => (
+                <button
+                  key={preset.val}
+                  type="button"
+                  onClick={() => setZoom(preset.val)}
+                  className={`px-2 py-0.5 text-[11px] font-bold rounded transition-colors ${
+                    zoom === preset.val
+                      ? 'bg-blue-600 text-white shadow-xs'
+                      : isFullscreen
+                      ? 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+                      : 'bg-white text-slate-700 hover:bg-slate-100 border border-slate-200'
+                  }`}
+                >
+                  {preset.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Live Radius Readout Badge */}
+          <div className="flex items-center gap-2">
+            <span className="px-3 py-1 bg-blue-50 text-blue-900 border border-blue-200 rounded-lg text-xs font-mono font-bold flex items-center gap-2 shadow-xs">
+              <Target className="w-3.5 h-3.5 text-blue-600" />
+              <span>{zoom}x Zoom</span>
+              <span className="text-slate-300">•</span>
+              <span className="text-emerald-700 font-bold">{getInspectionRadius(zoom)}</span>
+            </span>
+          </div>
+        </div>
+
+        {/* Visual Inspection Perimeter Rectangle Toolbar */}
+        <div className={`border rounded-lg p-2.5 flex flex-col md:flex-row md:items-center justify-between gap-3 shadow-xs transition-colors ${isFullscreen ? 'bg-slate-800/95 border-slate-700 text-slate-100' : 'bg-slate-900 text-white border-slate-800'}`}>
+          <div className="flex flex-wrap items-center gap-2.5">
+            {/* Toggle Perimeter Box Button */}
+            <button
+              type="button"
+              onClick={() => setShowPerimeterRectangle(!showPerimeterRectangle)}
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-bold transition-all shadow-xs ${
+                showPerimeterRectangle
+                  ? 'bg-blue-600 hover:bg-blue-700 text-white ring-2 ring-blue-400/40'
+                  : 'bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-slate-200 border border-slate-700'
+              }`}
+            >
+              <Square className="w-4 h-4" />
+              <span>Perimeter Boundary Box</span>
+              <span className={`text-[10px] font-mono px-1.5 py-0.2 rounded font-extrabold ${showPerimeterRectangle ? 'bg-blue-900 text-blue-100' : 'bg-slate-700 text-slate-400'}`}>
+                {showPerimeterRectangle ? 'ACTIVE' : 'OFF'}
+              </span>
+            </button>
+
+            {showPerimeterRectangle && (
+              <>
+                {/* Color Theme Selector */}
+                <div className="flex items-center gap-1 bg-slate-800/90 p-1 rounded-md border border-slate-700">
+                  <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider px-1">Theme:</span>
+                  {[
+                    { id: 'blue', label: 'Tactical Blue', color: 'bg-blue-500' },
+                    { id: 'emerald', label: 'Emerald Zone', color: 'bg-emerald-500' },
+                    { id: 'amber', label: 'Amber Alert', color: 'bg-amber-500' },
+                    { id: 'crimson', label: 'Crimson Hazard', color: 'bg-red-500' },
+                  ].map((theme) => (
+                    <button
+                      key={theme.id}
+                      type="button"
+                      onClick={() => setPerimeterColorTheme(theme.id as any)}
+                      className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold transition-all ${
+                        perimeterColorTheme === theme.id
+                          ? 'bg-slate-700 text-white shadow-xs border border-slate-500'
+                          : 'text-slate-400 hover:text-slate-200'
+                      }`}
+                    >
+                      <span className={`w-2 h-2 rounded-full ${theme.color}`} />
+                      <span className="hidden sm:inline">{theme.label}</span>
+                    </button>
+                  ))}
+                </div>
+
+                {/* Corner Coordinates Callout Toggle */}
+                <button
+                  type="button"
+                  onClick={() => setShowPerimeterCornerTags(!showPerimeterCornerTags)}
+                  className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-bold border transition-colors ${
+                    showPerimeterCornerTags
+                      ? 'bg-slate-800 text-emerald-300 border-emerald-500/50'
+                      : 'bg-slate-800/50 text-slate-400 border-slate-700'
+                  }`}
+                  title="Toggle corner Lat/Lng coordinate markers"
+                >
+                  <Crosshair className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>Corner Callouts</span>
+                </button>
+              </>
+            )}
+          </div>
+
+          {/* Live Boundary Metric Readout */}
+          <div className="flex items-center gap-2 text-xs font-mono font-bold text-slate-300 bg-slate-800/90 px-3 py-1 rounded-lg border border-slate-700">
+            <Focus className="w-3.5 h-3.5 text-blue-400 flex-shrink-0" />
+            <span>Inspection Boundary Span:</span>
+            <span className="text-emerald-400 font-extrabold">
+              {radiusMeters * 2 >= 1000 ? `${((radiusMeters * 2) / 1000).toFixed(2)}km` : `${radiusMeters * 2}m`} × {radiusMeters * 2 >= 1000 ? `${((radiusMeters * 2) / 1000).toFixed(2)}km` : `${radiusMeters * 2}m`}
+            </span>
+          </div>
+        </div>
       </div>
 
       {/* API Key Banner Warning if Key Missing */}
@@ -640,6 +1288,42 @@ export const GoogleMapView: React.FC<GoogleMapViewProps> = ({
                 }
               }}
             >
+              {/* Visual Inspection Perimeter Rectangle Overlay */}
+              {showPerimeterRectangle && (
+                <>
+                  <InspectionPerimeterRectangle
+                    bounds={perimeterBounds}
+                    colorTheme={perimeterColorTheme}
+                  />
+
+                  {showPerimeterCornerTags && (
+                    <>
+                      {/* NW Corner Coordinate Marker Tag */}
+                      <AdvancedMarker position={{ lat: perimeterBounds.north, lng: perimeterBounds.west }}>
+                        <div className="bg-slate-900/90 text-white backdrop-blur-md px-2 py-0.5 rounded border border-slate-700 text-[10px] font-mono font-bold shadow-lg -translate-x-1/2 -translate-y-1/2 pointer-events-none whitespace-nowrap">
+                          NW: {perimeterBounds.north.toFixed(4)}°, {perimeterBounds.west.toFixed(4)}°
+                        </div>
+                      </AdvancedMarker>
+
+                      {/* SE Corner Coordinate Marker Tag */}
+                      <AdvancedMarker position={{ lat: perimeterBounds.south, lng: perimeterBounds.east }}>
+                        <div className="bg-slate-900/90 text-white backdrop-blur-md px-2 py-0.5 rounded border border-slate-700 text-[10px] font-mono font-bold shadow-lg -translate-x-1/2 -translate-y-1/2 pointer-events-none whitespace-nowrap">
+                          SE: {perimeterBounds.south.toFixed(4)}°, {perimeterBounds.east.toFixed(4)}°
+                        </div>
+                      </AdvancedMarker>
+
+                      {/* North Boundary Info Label */}
+                      <AdvancedMarker position={{ lat: perimeterBounds.north, lng: currentCenter.lng }}>
+                        <div className="bg-blue-950/90 text-blue-100 backdrop-blur-md px-2.5 py-1 rounded-md border border-blue-500/60 text-[10px] font-mono font-bold shadow-xl -translate-x-1/2 -translate-y-full mb-1 pointer-events-none whitespace-nowrap flex items-center gap-1.5">
+                          <span className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse" />
+                          <span>INSPECTION PERIMETER ({radiusMeters * 2}m × {radiusMeters * 2}m Zone)</span>
+                        </div>
+                      </AdvancedMarker>
+                    </>
+                  )}
+                </>
+              )}
+
               <AdvancedMarker
                 position={baseCenter}
                 onClick={() => {
@@ -660,16 +1344,96 @@ export const GoogleMapView: React.FC<GoogleMapViewProps> = ({
                 >
                   <div className="p-1 max-w-xs text-slate-900">
                     <h4 className="font-bold text-xs text-slate-900">{selectedPlace.place_name}</h4>
-                    <p className="text-[11px] text-slate-600 mt-0.5">{selectedPlace.street}, {selectedPlace.city}</p>
+                    <p className="text-[11px] text-slate-600 mt-0.5">{formatCityCountry(selectedPlace.city, selectedPlace.country)}</p>
                     <p className="text-[10px] text-slate-500 italic mt-1">{selectedPlace.description}</p>
                   </div>
                 </InfoWindow>
               )}
+
+              {/* Gemini Heatmap Overlay Points (Live Map View) */}
+              {showHeatmapOverlay && heatmapResult && heatmapResult.points.map((point) => {
+                const scaledRadius = Math.max(18, Math.round(point.radiusMeters * heatmapIntensityMultiplier));
+                const intensityPct = Math.round(point.intensity * 100);
+
+                let glowGradient = 'from-amber-400/80 via-red-500/60 to-purple-700/0';
+                let badgeColor = 'bg-red-600 text-white';
+                let dotColor = 'bg-red-500';
+
+                if (heatmapColorPalette === 'cyber') {
+                  glowGradient = 'from-cyan-400/80 via-emerald-500/60 to-fuchsia-600/0';
+                  badgeColor = 'bg-cyan-600 text-white';
+                  dotColor = 'bg-cyan-400';
+                } else if (heatmapColorPalette === 'crimson') {
+                  glowGradient = 'from-yellow-400/80 via-amber-500/70 to-red-600/0';
+                  badgeColor = 'bg-red-700 text-white';
+                  dotColor = 'bg-amber-400';
+                } else if (heatmapColorPalette === 'spectral') {
+                  glowGradient = 'from-lime-400/80 via-orange-500/70 to-rose-700/0';
+                  badgeColor = 'bg-orange-600 text-white';
+                  dotColor = 'bg-lime-400';
+                }
+
+                return (
+                  <React.Fragment key={point.id}>
+                    <AdvancedMarker
+                      position={{ lat: point.lat, lng: point.lng }}
+                      onClick={() => setSelectedHotspot(selectedHotspot?.id === point.id ? null : point)}
+                    >
+                      <div className="relative cursor-pointer group flex items-center justify-center -translate-x-1/2 -translate-y-1/2">
+                        {/* Radial Heat Circle */}
+                        <div
+                          style={{
+                            width: `${scaledRadius * 2.4}px`,
+                            height: `${scaledRadius * 2.4}px`,
+                            opacity: heatmapOpacity,
+                          }}
+                          className={`rounded-full bg-gradient-radial ${glowGradient} animate-pulse pointer-events-none transition-all duration-300 shadow-2xl`}
+                        />
+
+                        {/* Ping Ring & Core Dot */}
+                        <div className="absolute w-6 h-6 rounded-full border-2 border-white/80 animate-ping opacity-75" />
+                        <div className={`absolute w-3.5 h-3.5 rounded-full ${dotColor} border-2 border-white shadow-lg group-hover:scale-125 transition-transform`} />
+
+                        {/* Mini Hotspot Badge */}
+                        <div className="absolute -top-6 left-1/2 -translate-x-1/2 whitespace-nowrap bg-slate-900/95 text-white text-[9px] font-extrabold px-1.5 py-0.5 rounded border border-slate-700 shadow-xl flex items-center gap-1">
+                          <span className={`w-1.5 h-1.5 rounded-full ${point.severity === 'Critical' ? 'bg-red-500 animate-ping' : point.severity === 'High' ? 'bg-amber-400' : 'bg-emerald-400'}`} />
+                          <span>{point.changeType} ({intensityPct}%)</span>
+                        </div>
+                      </div>
+                    </AdvancedMarker>
+
+                    {/* Interactive Hotspot Info Window */}
+                    {selectedHotspot?.id === point.id && (
+                      <InfoWindow
+                        position={{ lat: point.lat, lng: point.lng }}
+                        onCloseClick={() => setSelectedHotspot(null)}
+                      >
+                        <div className="p-1.5 max-w-xs text-slate-900 font-sans">
+                          <div className="flex items-center justify-between gap-2 border-b border-slate-200 pb-1 mb-1">
+                            <span className={`px-2 py-0.5 text-[10px] font-black uppercase rounded ${badgeColor}`}>
+                              {point.severity} SEVERITY
+                            </span>
+                            <span className="text-[10px] font-mono text-slate-500 font-bold">
+                              Heat: {intensityPct}%
+                            </span>
+                          </div>
+                          <h5 className="font-extrabold text-xs text-slate-900">{point.changeType}</h5>
+                          <p className="text-[11px] text-slate-700 mt-1 leading-snug">{point.description}</p>
+                          <div className="mt-2 text-[10px] font-mono text-slate-500 bg-slate-100 p-1.5 rounded border border-slate-200">
+                            <div>Coords: {point.lat.toFixed(5)}°, {point.lng.toFixed(5)}°</div>
+                            <div>Radius: {point.radiusMeters}m ({point.xPercent}% X, {point.yPercent}% Y)</div>
+                          </div>
+                        </div>
+                      </InfoWindow>
+                    )}
+                  </React.Fragment>
+                );
+              })}
             </Map>
           </APIProvider>
         ) : (
           /* High Fidelity Canvas Map Fallback when no Google Maps Key */
-          <div className="w-full h-full relative flex flex-col items-center justify-center bg-slate-100">
+          <div className="w-full h-full relative flex flex-col items-center justify-center bg-slate-100 overflow-hidden">
             <img
               src={generateSyntheticMapSnapshot({
                 placeName: selectedPlace.place_name,
@@ -683,6 +1447,137 @@ export const GoogleMapView: React.FC<GoogleMapViewProps> = ({
               alt="Interactive Map View"
               className="w-full h-full object-cover"
             />
+
+            {/* SVG Heatmap Overlay for Static Canvas View */}
+            {showHeatmapOverlay && heatmapResult && (
+              <div className="absolute inset-0 pointer-events-none z-20 overflow-hidden">
+                <svg className="w-full h-full">
+                  <defs>
+                    <radialGradient id="thermalHeatGrad" cx="50%" cy="50%" r="50%">
+                      <stop offset="0%" stopColor="#ef4444" stopOpacity="0.95" />
+                      <stop offset="40%" stopColor="#f59e0b" stopOpacity="0.7" />
+                      <stop offset="75%" stopColor="#8b5cf6" stopOpacity="0.35" />
+                      <stop offset="100%" stopColor="#3b82f6" stopOpacity="0" />
+                    </radialGradient>
+                    <radialGradient id="cyberHeatGrad" cx="50%" cy="50%" r="50%">
+                      <stop offset="0%" stopColor="#06b6d4" stopOpacity="0.95" />
+                      <stop offset="40%" stopColor="#10b981" stopOpacity="0.7" />
+                      <stop offset="75%" stopColor="#d946ef" stopOpacity="0.35" />
+                      <stop offset="100%" stopColor="#3b82f6" stopOpacity="0" />
+                    </radialGradient>
+                    <radialGradient id="crimsonHeatGrad" cx="50%" cy="50%" r="50%">
+                      <stop offset="0%" stopColor="#f59e0b" stopOpacity="0.95" />
+                      <stop offset="50%" stopColor="#dc2626" stopOpacity="0.75" />
+                      <stop offset="100%" stopColor="#7f1d1d" stopOpacity="0" />
+                    </radialGradient>
+                  </defs>
+
+                  {heatmapResult.points.map((pt) => {
+                    const rad = Math.max(30, Math.round(pt.radiusMeters * 1.5 * heatmapIntensityMultiplier));
+                    const gradId =
+                      heatmapColorPalette === 'cyber' ? 'url(#cyberHeatGrad)' :
+                      heatmapColorPalette === 'crimson' ? 'url(#crimsonHeatGrad)' :
+                      'url(#thermalHeatGrad)';
+
+                    return (
+                      <g key={pt.id} style={{ opacity: heatmapOpacity }}>
+                        <circle
+                          cx={`${pt.xPercent}%`}
+                          cy={`${pt.yPercent}%`}
+                          r={rad}
+                          fill={gradId}
+                          className="animate-pulse"
+                        />
+                        <circle
+                          cx={`${pt.xPercent}%`}
+                          cy={`${pt.yPercent}%`}
+                          r={rad * 0.35}
+                          fill="#ffffff"
+                          fillOpacity="0.6"
+                        />
+                      </g>
+                    );
+                  })}
+                </svg>
+
+                {/* Hotspot Interactive Badges for Static Canvas View */}
+                {heatmapResult.points.map((pt) => (
+                  <div
+                    key={`badge-${pt.id}`}
+                    style={{ left: `${pt.xPercent}%`, top: `${pt.yPercent}%` }}
+                    className="absolute -translate-x-1/2 -translate-y-1/2 pointer-events-auto cursor-pointer group z-30"
+                    onClick={() => setSelectedHotspot(selectedHotspot?.id === pt.id ? null : pt)}
+                  >
+                    <div className="w-5 h-5 rounded-full border-2 border-white bg-red-600 animate-ping absolute" />
+                    <div className="w-4 h-4 rounded-full border-2 border-white bg-amber-400 relative flex items-center justify-center shadow-lg group-hover:scale-125 transition-transform">
+                      <span className="w-1.5 h-1.5 rounded-full bg-red-700" />
+                    </div>
+
+                    <div className="absolute top-5 left-1/2 -translate-x-1/2 whitespace-nowrap bg-slate-900/95 text-white text-[10px] font-extrabold px-2 py-0.5 rounded border border-slate-700 shadow-xl flex items-center gap-1.5">
+                      <span className={`w-2 h-2 rounded-full ${pt.severity === 'Critical' ? 'bg-red-500 animate-ping' : 'bg-amber-400'}`} />
+                      <span>{pt.changeType}</span>
+                      <span className="text-amber-300 font-mono">({Math.round(pt.intensity * 100)}%)</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Visual Inspection Perimeter Rectangle Overlay for Static Canvas */}
+            {showPerimeterRectangle && (
+              <div className="absolute inset-0 pointer-events-none flex items-center justify-center p-8">
+                <div className={`relative w-3/4 h-3/4 border-2 border-dashed rounded-xl transition-all duration-300 flex flex-col justify-between p-3 shadow-xl ${
+                  perimeterColorTheme === 'emerald' ? 'border-emerald-400 bg-emerald-500/5 shadow-emerald-500/10' :
+                  perimeterColorTheme === 'amber' ? 'border-amber-400 bg-amber-500/5 shadow-amber-500/10' :
+                  perimeterColorTheme === 'crimson' ? 'border-red-400 bg-red-500/5 shadow-red-500/10' :
+                  'border-blue-400 bg-blue-500/5 shadow-blue-500/10'
+                }`}>
+                  {/* Corner Bracket Graphics (┌ ┐ └ ┘) */}
+                  <div className="absolute -top-1 -left-1 w-4 h-4 border-t-2 border-l-2 border-white" />
+                  <div className="absolute -top-1 -right-1 w-4 h-4 border-t-2 border-r-2 border-white" />
+                  <div className="absolute -bottom-1 -left-1 w-4 h-4 border-b-2 border-l-2 border-white" />
+                  <div className="absolute -bottom-1 -right-1 w-4 h-4 border-b-2 border-r-2 border-white" />
+
+                  {/* Center Crosshair */}
+                  <div className="absolute inset-0 flex items-center justify-center opacity-30">
+                    <div className="w-8 h-0.5 bg-white" />
+                    <div className="h-8 w-0.5 bg-white absolute" />
+                  </div>
+
+                  {/* Top Boundary Label */}
+                  <div className="self-center bg-slate-900/90 text-white backdrop-blur-md px-3 py-1 rounded-md text-[10px] font-mono font-bold border border-slate-700 shadow-md">
+                    INSPECTION PERIMETER ({radiusMeters * 2}m × {radiusMeters * 2}m Zone)
+                  </div>
+
+                  {/* Corner Lat/Lng Callout Badges */}
+                  {showPerimeterCornerTags && (
+                    <div className="flex justify-between items-end text-[9px] font-mono font-bold text-white">
+                      <span className="bg-slate-900/90 px-1.5 py-0.5 rounded border border-slate-700">
+                        NW: {perimeterBounds.north.toFixed(4)}°, {perimeterBounds.west.toFixed(4)}°
+                      </span>
+                      <span className="bg-slate-900/90 px-1.5 py-0.5 rounded border border-slate-700">
+                        SE: {perimeterBounds.south.toFixed(4)}°, {perimeterBounds.east.toFixed(4)}°
+                      </span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Radar Scanner Animation Overlay when Computing Gemini Heatmap */}
+        {isComputingHeatmap && (
+          <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-xs z-40 flex flex-col items-center justify-center p-6 text-center text-white">
+            <div className="relative w-20 h-20 mb-4 flex items-center justify-center">
+              <div className="absolute inset-0 rounded-full border-2 border-amber-400/40 animate-ping" />
+              <div className="absolute inset-2 rounded-full border-2 border-dashed border-red-500 animate-spin" />
+              <Flame className="w-8 h-8 text-amber-400 animate-pulse" />
+            </div>
+            <h4 className="font-black text-sm text-amber-300 uppercase tracking-wider">Gemini Spatial Heatmap Analysis</h4>
+            <p className="text-xs text-slate-300 max-w-sm mt-1">
+              Comparing baseline and current satellite snapshots to compute differential spatial change hotspots...
+            </p>
           </div>
         )}
 
@@ -780,7 +1675,7 @@ export const GoogleMapView: React.FC<GoogleMapViewProps> = ({
             </div>
 
             <p className="text-[11px] text-slate-600 font-medium leading-relaxed">
-              {selectedPlace.street}, {selectedPlace.city}, {selectedPlace.country}
+              {formatCityCountry(selectedPlace.city, selectedPlace.country)}
             </p>
 
             {selectedPlace.description && (
@@ -844,23 +1739,48 @@ export const GoogleMapView: React.FC<GoogleMapViewProps> = ({
             </button>
           </div>
 
-          {/* Zoom Buttons */}
-          <div className="flex items-center justify-between bg-slate-50 p-1 rounded border border-slate-200 text-xs text-slate-700">
-            <button
-              onClick={() => setZoom(Math.max(2, zoom - 1))}
-              className="p-1 hover:bg-slate-200 rounded text-slate-700"
-              title="Zoom Out"
-            >
-              <ZoomOut className="w-4 h-4" />
-            </button>
-            <span className="font-mono text-blue-700 font-bold px-2 text-xs">{zoom}x</span>
-            <button
-              onClick={() => setZoom(Math.min(21, zoom + 1))}
-              className="p-1 hover:bg-slate-200 rounded text-slate-700"
-              title="Zoom In"
-            >
-              <ZoomIn className="w-4 h-4" />
-            </button>
+          {/* Floating Zoom & Radius Control Slider Box */}
+          <div className="flex flex-col gap-1.5 bg-slate-50/95 backdrop-blur-md p-2 rounded-lg border border-slate-200 shadow-sm text-xs">
+            <div className="flex items-center justify-between text-[11px] font-bold text-slate-800">
+              <span className="flex items-center gap-1 text-blue-700">
+                <Target className="w-3 h-3 text-blue-600" />
+                <span>Radius Control</span>
+              </span>
+              <span className="font-mono text-blue-800 bg-blue-100/80 px-1.5 py-0.5 rounded text-[10px] font-extrabold">{zoom}x</span>
+            </div>
+
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => setZoom(Math.max(2, zoom - 1))}
+                className="p-1 hover:bg-slate-200 rounded text-slate-700 transition-colors"
+                title="Zoom Out (-)"
+              >
+                <ZoomOut className="w-3.5 h-3.5" />
+              </button>
+              <input
+                type="range"
+                min={2}
+                max={21}
+                step={1}
+                value={zoom}
+                onChange={(e) => setZoom(Number(e.target.value))}
+                className="w-28 h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-blue-600 focus:outline-none"
+                title={`Adjust Inspection Radius (Current Zoom: ${zoom}x)`}
+              />
+              <button
+                type="button"
+                onClick={() => setZoom(Math.min(21, zoom + 1))}
+                className="p-1 hover:bg-slate-200 rounded text-slate-700 transition-colors"
+                title="Zoom In (+)"
+              >
+                <ZoomIn className="w-3.5 h-3.5" />
+              </button>
+            </div>
+
+            <div className="text-[10px] text-emerald-800 font-medium text-center font-mono bg-emerald-50 border border-emerald-200/80 rounded py-0.5">
+              {getInspectionRadius(zoom)}
+            </div>
           </div>
         </div>
       </div>
@@ -888,9 +1808,50 @@ export const GoogleMapView: React.FC<GoogleMapViewProps> = ({
                 <input
                   type="text"
                   disabled
-                  value={`${selectedPlace.place_name} (${selectedPlace.city}, ${selectedPlace.country})`}
+                  value={`${selectedPlace.place_name} (${formatCityCountry(selectedPlace.city, selectedPlace.country)})`}
                   className="w-full bg-slate-100 text-slate-600 px-3 py-2 rounded border border-slate-200 cursor-not-allowed"
                 />
+              </div>
+
+              {/* Inspection Radius & Zoom Slider */}
+              <div className="bg-slate-50 p-3 rounded-lg border border-slate-200 space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <label className="text-slate-800 font-bold flex items-center gap-1.5 text-xs">
+                    <Target className="w-3.5 h-3.5 text-blue-600" />
+                    <span>Snapshot Inspection Radius &amp; Zoom</span>
+                  </label>
+                  <span className="text-blue-800 font-mono font-bold text-xs bg-blue-100 px-2.5 py-0.5 rounded border border-blue-200">
+                    {zoom}x Zoom • <span className="text-emerald-700">{getInspectionRadius(zoom)}</span>
+                  </span>
+                </div>
+                <div className="flex items-center gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => setZoom(Math.max(2, zoom - 1))}
+                    className="p-1.5 bg-white hover:bg-slate-100 text-slate-700 rounded border border-slate-200 shadow-xs transition-colors"
+                    title="Zoom Out (-)"
+                  >
+                    <ZoomOut className="w-3.5 h-3.5" />
+                  </button>
+                  <input
+                    type="range"
+                    min={2}
+                    max={21}
+                    step={1}
+                    value={zoom}
+                    onChange={(e) => setZoom(Number(e.target.value))}
+                    className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-blue-600 focus:outline-none"
+                    title={`Adjust Snapshot Zoom Level: ${zoom}x`}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setZoom(Math.min(21, zoom + 1))}
+                    className="p-1.5 bg-white hover:bg-slate-100 text-slate-700 rounded border border-slate-200 shadow-xs transition-colors"
+                    title="Zoom In (+)"
+                  >
+                    <ZoomIn className="w-3.5 h-3.5" />
+                  </button>
+                </div>
               </div>
 
               <div className="grid grid-cols-3 gap-3">
@@ -946,19 +1907,30 @@ export const GoogleMapView: React.FC<GoogleMapViewProps> = ({
               </div>
             </div>
 
-            <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-200">
+            <div className="flex flex-wrap items-center justify-end gap-2 pt-3 border-t border-slate-200">
               <button
+                type="button"
                 onClick={() => setShowCaptureModal(false)}
-                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded border border-slate-200"
+                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded border border-slate-200 transition-colors"
               >
                 Cancel
               </button>
               <button
-                onClick={handleConfirmSnapshot}
+                type="button"
+                onClick={() => handleConfirmSnapshot(false)}
                 disabled={isCapturing}
-                className="inline-flex items-center gap-2 px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded shadow-md disabled:opacity-50"
+                className="inline-flex items-center gap-1.5 px-4 py-2 bg-slate-800 hover:bg-slate-900 text-white text-xs font-bold rounded shadow-xs disabled:opacity-50 transition-all"
               >
-                {isCapturing ? 'Saving...' : 'Save Snapshot to History'}
+                {isCapturing ? 'Saving...' : 'Save to History Only'}
+              </button>
+              <button
+                type="button"
+                onClick={() => handleConfirmSnapshot(true)}
+                disabled={isCapturing}
+                className="inline-flex items-center gap-2 px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded shadow-md disabled:opacity-50 transition-all active:scale-95"
+              >
+                <Download className="w-4 h-4" />
+                <span>{isCapturing ? 'Saving...' : 'Save & Download Image'}</span>
               </button>
             </div>
           </div>

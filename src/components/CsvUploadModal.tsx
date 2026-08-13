@@ -162,30 +162,57 @@ export const CsvUploadModal: React.FC<CsvUploadModalProps> = ({
             rowValues[0] ||
             `Location ${index + 1}`;
 
-          // 1. Combine place_name with street
-          let combinedPlaceName = fallbackName;
-          if (rawPlaceName && rawStreet) {
-            if (rawPlaceName.toLowerCase().includes(rawStreet.toLowerCase())) {
-              combinedPlaceName = rawPlaceName;
-            } else {
-              combinedPlaceName = `${rawPlaceName}, ${rawStreet}`;
-            }
-          } else if (!rawPlaceName && rawStreet) {
-            combinedPlaceName = rawStreet;
+          // 1. Clean Country and City (ensure country is stored strictly in country field, not concatenated into city)
+          let cleanCountry = rawCountry.trim();
+          let cleanCity = rawCity.trim();
+
+          // Strip street from city if present
+          if (cleanCity && rawStreet) {
+            const streetRegex = new RegExp(rawStreet.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, '\\$&'), 'gi');
+            cleanCity = cleanCity.replace(streetRegex, '').replace(/^[\s,:-]+|[\s,:-]+$/g, '').trim();
           }
 
-          // 2. Combine city with country
-          let combinedCity = rawCity;
-          if (rawCity && rawCountry) {
-            if (rawCity.toLowerCase().includes(rawCountry.toLowerCase())) {
-              combinedCity = rawCity;
-            } else {
-              combinedCity = `${rawCity}, ${rawCountry}`;
+          // Strip country from city if country is embedded inside city value (e.g. "San Francisco, United States" -> "San Francisco")
+          if (cleanCity && cleanCountry) {
+            const countryRegex = new RegExp(`\\b${cleanCountry.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, '\\$&')}\\b`, 'gi');
+            cleanCity = cleanCity.replace(countryRegex, '').replace(/^[\s,:-]+|[\s,:-]+$/g, '').trim();
+          }
+
+          if (!cleanCity) {
+            cleanCity = rawArea ? rawArea : 'San Francisco';
+          }
+          if (!cleanCountry) {
+            cleanCountry = 'United States';
+          }
+
+          // 2. Clean Street and Place Name (avoid street appearing twice)
+          let cleanStreet = rawStreet.trim();
+          let cleanPlaceName = rawPlaceName.trim();
+
+          // If rawPlaceName contains street address, strip street from place_name to keep place_name concise
+          if (cleanPlaceName && cleanStreet) {
+            if (cleanPlaceName.toLowerCase().includes(cleanStreet.toLowerCase()) && cleanPlaceName.toLowerCase() !== cleanStreet.toLowerCase()) {
+              const streetRegex = new RegExp(cleanStreet.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, '\\$&'), 'gi');
+              const stripped = cleanPlaceName.replace(streetRegex, '').replace(/^[\s,:-]+|[\s,:-]+$/g, '').trim();
+              if (stripped.length >= 2) {
+                cleanPlaceName = stripped;
+              }
             }
-          } else if (!rawCity && rawCountry) {
-            combinedCity = rawCountry;
-          } else if (!rawCity && !rawCountry) {
-            combinedCity = 'San Francisco, United States';
+          }
+
+          // Fallback place_name if empty
+          if (!cleanPlaceName) {
+            if (rawArea && rawArea !== 'General Area') {
+              cleanPlaceName = `${rawArea} Site`;
+            } else if (cleanStreet) {
+              cleanPlaceName = cleanStreet;
+            } else {
+              cleanPlaceName = `Location ${index + 1}`;
+            }
+          }
+
+          if (!cleanStreet) {
+            cleanStreet = 'Main St';
           }
 
           // 3. Combine / parse latitude with longitude
@@ -235,28 +262,28 @@ export const CsvUploadModal: React.FC<CsvUploadModalProps> = ({
           }
 
           // Handle duplicate names in the same upload batch by appending index
-          let cleanName = combinedPlaceName;
+          let cleanName = cleanPlaceName;
           const sameNameCount = items.filter(
             (p) => p.place_name.trim().toLowerCase().startsWith(cleanName.toLowerCase())
           ).length;
 
           if (sameNameCount > 0) {
-            cleanName = `${combinedPlaceName} (#${sameNameCount + 1})`;
+            cleanName = `${cleanPlaceName} (#${sameNameCount + 1})`;
           }
 
           // Determine final Category assignment based on user selection or smart keyword classification
           const finalCategory =
             categoryOverride === 'auto'
-              ? detectPlaceCategory(rawCategory, cleanName, baseDesc, rawArea, rawStreet)
+              ? detectPlaceCategory(rawCategory, cleanName, baseDesc, rawArea, cleanStreet)
               : categoryOverride;
 
           items.push({
             id: rawId ? String(rawId) : `P${String(index + 1).padStart(3, '0')}`,
             place_name: cleanName,
             area: rawArea,
-            street: rawStreet || 'Main St',
-            city: combinedCity,
-            country: rawCountry || 'United States',
+            street: cleanStreet,
+            city: cleanCity,
+            country: cleanCountry,
             latitude: lat,
             longitude: lng,
             description: baseDesc,

@@ -90,6 +90,32 @@ export interface IncidentAlarm {
   label: string;
 }
 
+export interface HeatmapPoint {
+  id: string;
+  xPercent: number;
+  yPercent: number;
+  lat: number;
+  lng: number;
+  intensity: number;
+  radiusMeters: number;
+  changeType: string;
+  description: string;
+  severity: 'Low' | 'Medium' | 'High' | 'Critical';
+}
+
+export interface HeatmapOverlayResult {
+  placeId: string;
+  snapshotAId: string;
+  snapshotBId: string;
+  snapshotADate: string;
+  snapshotBDate: string;
+  generatedAt: string;
+  overallSummary: string;
+  changeDetected: boolean;
+  maxIntensity: number;
+  points: HeatmapPoint[];
+}
+
 export interface FilterState {
   searchQuery: string;
   area: string;

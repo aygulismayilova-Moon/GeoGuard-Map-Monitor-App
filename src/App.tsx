@@ -541,6 +541,7 @@ export default function App() {
 
             <GoogleMapView
               selectedPlace={selectedPlace}
+              snapshots={selectedPlaceSnapshots}
               hasGoogleMapsKey={hasGoogleMapsKey}
               onSnapshotCaptured={handleSnapshotCaptured}
               onOpenApiKeyHelp={() => setIsApiKeyHelpModalOpen(true)}
@@ -552,6 +553,7 @@ export default function App() {
               snapshots={selectedPlaceSnapshots}
               onDeleteSnapshot={handleDeleteSnapshot}
               onUpdateSnapshotNotes={handleUpdateSnapshotNotes}
+              onAddSnapshot={handleSnapshotCaptured}
             />
           </section>
         ) : (

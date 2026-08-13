@@ -527,7 +527,13 @@ export const PlaceGrid: React.FC<PlaceGridProps> = ({
                     <td className="px-3 py-2 font-semibold text-slate-900">
                       <div>
                         <span>{place.place_name}</span>
-                        <div className="text-[10px] text-slate-400 font-normal">{place.street}</div>
+                        {place.street &&
+                         place.street.trim().toLowerCase() !== 'main st' &&
+                         place.street.trim().toLowerCase() !== 'n/a' &&
+                         !place.place_name.toLowerCase().includes(place.street.toLowerCase()) &&
+                         place.place_name.trim().toLowerCase() !== place.street.trim().toLowerCase() && (
+                          <div className="text-[10px] text-slate-400 font-normal">{place.street}</div>
+                        )}
                       </div>
                     </td>
 
@@ -602,7 +608,9 @@ export const PlaceGrid: React.FC<PlaceGridProps> = ({
 
                     {/* City / Country */}
                     <td className="px-3 py-2 text-slate-600">
-                      {place.city}, {place.country}
+                      {place.city && place.country && place.city.toLowerCase().includes(place.country.toLowerCase())
+                        ? place.city
+                        : `${place.city || ''}${place.city && place.country ? ', ' : ''}${place.country || ''}`}
                     </td>
 
                     {/* Coordinates */}

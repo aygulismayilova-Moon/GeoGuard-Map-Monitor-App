@@ -4,6 +4,14 @@
  * and handles map viewport canvas capture with metadata overlays.
  */
 
+export interface PerimeterOverlayOptions {
+  show?: boolean;
+  radiusMeters?: number;
+  colorTheme?: 'emerald' | 'amber' | 'crimson' | 'blue' | string;
+  bounds?: { north: number; south: number; east: number; west: number };
+  showCornerTags?: boolean;
+}
+
 export interface SimulationOverlayOptions {
   placeName: string;
   eventType?: 'Baseline' | 'Construction' | 'Accident' | 'Deforestation' | 'Flood' | 'Normal';
@@ -12,6 +20,7 @@ export interface SimulationOverlayOptions {
   lng: number;
   zoom: number;
   mapType?: 'satellite' | 'roadmap' | 'hybrid' | 'terrain';
+  perimeterOptions?: PerimeterOverlayOptions;
 }
 
 export interface CaptureSnapshotParams extends SimulationOverlayOptions {
@@ -61,6 +70,53 @@ async function fetchServerGoogleStaticMap(
 }
 
 /**
+ * Checks if a 2D canvas context contains blank or pure black pixel data
+ * (e.g., when drawing from a WebGL canvas whose drawing buffer was cleared)
+ */
+function isCanvasBlankOrBlack(ctx: CanvasRenderingContext2D, width: number, height: number): boolean {
+  try {
+    const samples = [
+      { x: Math.floor(width * 0.5), y: Math.floor(height * 0.5) },
+      { x: Math.floor(width * 0.25), y: Math.floor(height * 0.25) },
+      { x: Math.floor(width * 0.75), y: Math.floor(height * 0.25) },
+      { x: Math.floor(width * 0.25), y: Math.floor(height * 0.75) },
+      { x: Math.floor(width * 0.75), y: Math.floor(height * 0.75) },
+      { x: Math.floor(width * 0.5), y: Math.floor(height * 0.25) },
+      { x: Math.floor(width * 0.5), y: Math.floor(height * 0.75) },
+      { x: Math.floor(width * 0.25), y: Math.floor(height * 0.5) },
+      { x: Math.floor(width * 0.75), y: Math.floor(height * 0.5) },
+      { x: Math.floor(width * 0.1), y: Math.floor(height * 0.1) },
+      { x: Math.floor(width * 0.9), y: Math.floor(height * 0.9) },
+    ];
+
+    let totalBrightness = 0;
+    let validSampleCount = 0;
+
+    for (const p of samples) {
+      const pixel = ctx.getImageData(p.x, p.y, 1, 1).data;
+      const r = pixel[0];
+      const g = pixel[1];
+      const b = pixel[2];
+      const a = pixel[3];
+
+      if (a > 10) {
+        validSampleCount++;
+        totalBrightness += (r + g + b) / 3;
+      }
+    }
+
+    if (validSampleCount === 0) {
+      return true;
+    }
+
+    const avgBrightness = totalBrightness / validSampleCount;
+    return avgBrightness < 6;
+  } catch (err) {
+    return false;
+  }
+}
+
+/**
  * Renders real high-resolution satellite or roadmap map tiles for exact coordinates on a canvas
  */
 export async function fetchRealTileMapCanvas(
@@ -78,6 +134,12 @@ export async function fetchRealTileMapCanvas(
     const ctx = canvas.getContext('2d');
     if (!ctx) return null;
 
+    const isSatellite = mapType === 'satellite' || mapType === 'hybrid' || !mapType;
+
+    // Fill background with rich slate/earth tones so canvas is NEVER pitch black
+    ctx.fillStyle = isSatellite ? '#1e293b' : '#f8fafc';
+    ctx.fillRect(0, 0, width, height);
+
     const z = Math.min(Math.max(zoom, 1), 19);
     const n = Math.pow(2, z);
     const xFrac = ((lng + 180) / 360) * n;
@@ -93,8 +155,6 @@ export async function fetchRealTileMapCanvas(
 
     const centerX = width / 2;
     const centerY = height / 2;
-
-    const isSatellite = mapType === 'satellite' || mapType === 'hybrid' || !mapType;
 
     const tilePromises: Promise<void>[] = [];
 
@@ -142,7 +202,7 @@ export async function fetchRealTileMapCanvas(
  * Asynchronously captures a real Google Map snapshot in vertical orientation
  */
 export async function captureGoogleMapSnapshot(params: CaptureSnapshotParams): Promise<string> {
-  const { mapContainer, apiKey, placeName, lat, lng, zoom, mapType = 'satellite', eventType = 'Baseline', dateText } = params;
+  const { mapContainer, apiKey, placeName, lat, lng, zoom, mapType = 'satellite', eventType = 'Baseline', dateText, perimeterOptions } = params;
 
   // 1. Try server proxy for official Google Static Maps API (Vertical 480x720)
   const serverGoogleImage = await fetchServerGoogleStaticMap(lat, lng, zoom, mapType, 480, 720);
@@ -162,7 +222,7 @@ export async function captureGoogleMapSnapshot(params: CaptureSnapshotParams): P
       const ctx = canvas.getContext('2d');
       if (ctx) {
         ctx.drawImage(img, 0, 0);
-        drawMapHUDAndOverlays(ctx, canvas.width, canvas.height, { placeName, lat, lng, zoom, eventType, dateText });
+        drawMapHUDAndOverlays(ctx, canvas.width, canvas.height, { placeName, lat, lng, zoom, eventType, dateText, perimeterOptions });
         return canvas.toDataURL('image/jpeg', 0.82);
       }
     } catch (err) {
@@ -188,7 +248,7 @@ export async function captureGoogleMapSnapshot(params: CaptureSnapshotParams): P
       const ctx = canvas.getContext('2d');
       if (ctx) {
         ctx.drawImage(img, 0, 0);
-        drawMapHUDAndOverlays(ctx, canvas.width, canvas.height, { placeName, lat, lng, zoom, eventType, dateText });
+        drawMapHUDAndOverlays(ctx, canvas.width, canvas.height, { placeName, lat, lng, zoom, eventType, dateText, perimeterOptions });
         return canvas.toDataURL('image/jpeg', 0.82);
       }
     } catch (err) {
@@ -201,19 +261,28 @@ export async function captureGoogleMapSnapshot(params: CaptureSnapshotParams): P
     const mapCanvases = Array.from(mapContainer.querySelectorAll('canvas'));
     if (mapCanvases.length > 0) {
       try {
-        const primaryCanvas = mapCanvases[0];
         const canvas = document.createElement('canvas');
         canvas.width = 480;
         canvas.height = 720;
         const ctx = canvas.getContext('2d');
         if (ctx) {
+          // Fill background so it's not transparent before drawing
+          ctx.fillStyle = mapType === 'satellite' ? '#1e293b' : '#f8fafc';
+          ctx.fillRect(0, 0, canvas.width, canvas.height);
+
           mapCanvases.forEach((c) => {
             try { ctx.drawImage(c, 0, 0, canvas.width, canvas.height); } catch (_) {}
           });
-          drawMapHUDAndOverlays(ctx, canvas.width, canvas.height, { placeName, lat, lng, zoom, eventType, dateText });
-          const dataUrl = canvas.toDataURL('image/jpeg', 0.82);
-          if (dataUrl && dataUrl.length > 500) {
-            return dataUrl;
+
+          // Check if the captured DOM canvas contains real imagery or if WebGL buffer was cleared
+          if (!isCanvasBlankOrBlack(ctx, canvas.width, canvas.height)) {
+            drawMapHUDAndOverlays(ctx, canvas.width, canvas.height, { placeName, lat, lng, zoom, eventType, dateText, perimeterOptions });
+            const dataUrl = canvas.toDataURL('image/jpeg', 0.82);
+            if (dataUrl && dataUrl.length > 500) {
+              return dataUrl;
+            }
+          } else {
+            console.warn('Captured DOM map canvas is blank/black (WebGL buffer cleared). Bypassing DOM capture and falling back to tile renderer.');
           }
         }
       } catch (err) {
@@ -227,13 +296,13 @@ export async function captureGoogleMapSnapshot(params: CaptureSnapshotParams): P
   if (tileCanvas) {
     const ctx = tileCanvas.getContext('2d');
     if (ctx) {
-      drawMapHUDAndOverlays(ctx, tileCanvas.width, tileCanvas.height, { placeName, lat, lng, zoom, eventType, dateText });
+      drawMapHUDAndOverlays(ctx, tileCanvas.width, tileCanvas.height, { placeName, lat, lng, zoom, eventType, dateText, perimeterOptions });
       return tileCanvas.toDataURL('image/jpeg', 0.82);
     }
   }
 
   // 5. Fallback synthetic canvas generator (Vertical 480x720)
-  return generateSyntheticMapSnapshot({ placeName, eventType, dateText, lat, lng, zoom, mapType });
+  return generateSyntheticMapSnapshot({ placeName, eventType, dateText, lat, lng, zoom, mapType, perimeterOptions });
 }
 
 /**
@@ -250,9 +319,109 @@ function drawMapHUDAndOverlays(
     zoom: number;
     eventType: string;
     dateText: string;
+    perimeterOptions?: PerimeterOverlayOptions;
   }
 ) {
-  const { placeName, lat, lng, zoom, eventType, dateText } = opts;
+  const { placeName, lat, lng, zoom, eventType, dateText, perimeterOptions } = opts;
+
+  // Draw Perimeter Boundary Box if active
+  if (perimeterOptions && perimeterOptions.show) {
+    const boxW = Math.round(width * 0.72);
+    const boxH = Math.round(height * 0.58);
+    const boxX = Math.round((width - boxW) / 2);
+    const boxY = Math.round((height - boxH) / 2);
+
+    let strokeColor = '#3b82f6';
+    let fillColor = 'rgba(59, 130, 246, 0.04)';
+
+    if (perimeterOptions.colorTheme === 'emerald') {
+      strokeColor = '#10b981';
+      fillColor = 'rgba(16, 185, 129, 0.04)';
+    } else if (perimeterOptions.colorTheme === 'amber') {
+      strokeColor = '#f59e0b';
+      fillColor = 'rgba(245, 158, 11, 0.04)';
+    } else if (perimeterOptions.colorTheme === 'crimson') {
+      strokeColor = '#ef4444';
+      fillColor = 'rgba(239, 68, 68, 0.04)';
+    }
+
+    // Ultra-light 4% fill so map imagery is 100% crystal clear
+    ctx.fillStyle = fillColor;
+    ctx.fillRect(boxX, boxY, boxW, boxH);
+
+    // Clean dashed boundary stroke
+    ctx.strokeStyle = strokeColor;
+    ctx.lineWidth = 2;
+    ctx.setLineDash([8, 5]);
+    ctx.strokeRect(boxX, boxY, boxW, boxH);
+    ctx.setLineDash([]);
+
+    // Solid white corner brackets (┌ ┐ └ ┘)
+    const cornerLength = 14;
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 2.5;
+
+    // NW corner
+    ctx.beginPath();
+    ctx.moveTo(boxX, boxY + cornerLength);
+    ctx.lineTo(boxX, boxY);
+    ctx.lineTo(boxX + cornerLength, boxY);
+    ctx.stroke();
+
+    // NE corner
+    ctx.beginPath();
+    ctx.moveTo(boxX + boxW - cornerLength, boxY);
+    ctx.lineTo(boxX + boxW, boxY);
+    ctx.lineTo(boxX + boxW, boxY + cornerLength);
+    ctx.stroke();
+
+    // SW corner
+    ctx.beginPath();
+    ctx.moveTo(boxX, boxY + boxH - cornerLength);
+    ctx.lineTo(boxX, boxY + boxH);
+    ctx.lineTo(boxX + cornerLength, boxY + boxH);
+    ctx.stroke();
+
+    // SE corner
+    ctx.beginPath();
+    ctx.moveTo(boxX + boxW - cornerLength, boxY + boxH);
+    ctx.lineTo(boxX + boxW, boxY + boxH);
+    ctx.lineTo(boxX + boxW, boxY + boxH - cornerLength);
+    ctx.stroke();
+
+    // Inspection Perimeter Top Label Badge
+    const radiusM = perimeterOptions.radiusMeters || 200;
+    const labelText = `INSPECTION PERIMETER (${radiusM * 2}m × ${radiusM * 2}m Zone)`;
+    ctx.font = 'bold 10px monospace';
+    const textMetrics = ctx.measureText(labelText);
+    const labelW = textMetrics.width + 16;
+
+    ctx.fillStyle = 'rgba(15, 23, 42, 0.92)';
+    ctx.fillRect(boxX + (boxW - labelW) / 2, boxY - 12, labelW, 20);
+    ctx.strokeStyle = strokeColor;
+    ctx.lineWidth = 1;
+    ctx.strokeRect(boxX + (boxW - labelW) / 2, boxY - 12, labelW, 20);
+
+    ctx.fillStyle = '#ffffff';
+    ctx.textAlign = 'center';
+    ctx.fillText(labelText, boxX + boxW / 2, boxY + 2);
+    ctx.textAlign = 'left';
+
+    // Corner Lat/Lng Coordinate Badges
+    if (perimeterOptions.showCornerTags && perimeterOptions.bounds) {
+      const nwText = `NW: ${perimeterOptions.bounds.north.toFixed(4)}°, ${perimeterOptions.bounds.west.toFixed(4)}°`;
+      const seText = `SE: ${perimeterOptions.bounds.south.toFixed(4)}°, ${perimeterOptions.bounds.east.toFixed(4)}°`;
+
+      ctx.font = 'bold 9px monospace';
+      ctx.fillStyle = 'rgba(15, 23, 42, 0.88)';
+      ctx.fillRect(boxX, boxY + boxH + 4, 135, 16);
+      ctx.fillRect(boxX + boxW - 135, boxY + boxH + 4, 135, 16);
+
+      ctx.fillStyle = strokeColor;
+      ctx.fillText(nwText, boxX + 4, boxY + boxH + 15);
+      ctx.fillText(seText, boxX + boxW - 131, boxY + boxH + 15);
+    }
+  }
 
   // Event overlay additions if simulated
   let eventText = '';
@@ -560,43 +729,16 @@ export function generateSyntheticMapSnapshot(options: SimulationOverlayOptions):
     ctx.fillText('🌊 FLOOD / WATER INUNDATION', 235, 220);
   }
 
-  // --- Map HUD / Timestamp / Coordinates Bar ---
-  ctx.fillStyle = 'rgba(15, 23, 42, 0.85)';
-  ctx.fillRect(10, 10, 360, 58);
-  ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
-  ctx.strokeRect(10, 10, 360, 58);
-
-  ctx.fillStyle = '#38bdf8';
-  ctx.font = 'bold 13px sans-serif';
-  ctx.fillText(options.placeName, 20, 30);
-
-  ctx.fillStyle = '#cbd5e1';
-  ctx.font = '11px monospace';
-  ctx.fillText(`LAT: ${options.lat.toFixed(4)}  LNG: ${options.lng.toFixed(4)} | ZOOM: ${options.zoom}x`, 20, 46);
-
-  // Timestamp badge (Top Right)
-  ctx.fillStyle = 'rgba(15, 23, 42, 0.85)';
-  ctx.fillRect(canvas.width - 210, 10, 200, 32);
-  ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
-  ctx.strokeRect(canvas.width - 210, 10, 200, 32);
-
-  ctx.fillStyle = '#f8fafc';
-  ctx.font = 'bold 11px sans-serif';
-  ctx.fillText(`📅 ${options.dateText}`, canvas.width - 200, 30);
-
-  // Target Crosshair at Center
-  ctx.strokeStyle = 'rgba(239, 68, 68, 0.6)';
-  ctx.lineWidth = 1.5;
-  ctx.beginPath();
-  ctx.moveTo(canvas.width / 2 - 15, canvas.height / 2);
-  ctx.lineTo(canvas.width / 2 + 15, canvas.height / 2);
-  ctx.moveTo(canvas.width / 2, canvas.height / 2 - 15);
-  ctx.lineTo(canvas.width / 2, canvas.height / 2 + 15);
-  ctx.stroke();
-
-  ctx.beginPath();
-  ctx.arc(canvas.width / 2, canvas.height / 2, 8, 0, Math.PI * 2);
-  ctx.stroke();
+  // --- Map HUD / Perimeter / Timestamp / Coordinates Bar ---
+  drawMapHUDAndOverlays(ctx, canvas.width, canvas.height, {
+    placeName: options.placeName,
+    lat: options.lat,
+    lng: options.lng,
+    zoom: options.zoom,
+    eventType: options.eventType || 'Baseline',
+    dateText: options.dateText,
+    perimeterOptions: options.perimeterOptions,
+  });
 
   return canvas.toDataURL('image/jpeg', 0.82);
 }

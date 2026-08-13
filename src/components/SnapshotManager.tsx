@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { MapSnapshot, PlaceItem, ChangeAnalysisResult } from '../types';
+import { saveSnapshot } from '../utils/snapshotStore';
 import {
   Layers,
   Sparkles,
@@ -28,6 +29,11 @@ import {
   CalendarRange,
   RotateCcw,
   Filter,
+  Upload,
+  FileUp,
+  FileJson,
+  FolderDown,
+  Plus,
 } from 'lucide-react';
 
 interface SnapshotManagerProps {
@@ -35,6 +41,7 @@ interface SnapshotManagerProps {
   snapshots: MapSnapshot[];
   onDeleteSnapshot: (id: string) => void;
   onUpdateSnapshotNotes: (id: string, notes: string) => void;
+  onAddSnapshot?: (snapshot: MapSnapshot) => void;
 }
 
 export const SnapshotManager: React.FC<SnapshotManagerProps> = ({
@@ -42,6 +49,7 @@ export const SnapshotManager: React.FC<SnapshotManagerProps> = ({
   snapshots,
   onDeleteSnapshot,
   onUpdateSnapshotNotes,
+  onAddSnapshot,
 }) => {
   // Image comparison state
   const [snapshotAId, setSnapshotAId] = useState<string>('');
@@ -65,6 +73,18 @@ export const SnapshotManager: React.FC<SnapshotManagerProps> = ({
   const [startDate, setStartDate] = useState<string>('');
   const [endDate, setEndDate] = useState<string>('');
   const [activePreset, setActivePreset] = useState<'all' | '7days' | '30days' | '90days' | 'thisYear' | 'custom'>('all');
+
+  // Upload & Simultaneous Download Modal State
+  const [isUploadModalOpen, setIsUploadModalOpen] = useState<boolean>(false);
+  const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [uploadPreviewUrl, setUploadPreviewUrl] = useState<string>('');
+  const [uploadDate, setUploadDate] = useState<string>(() => new Date().toISOString().split('T')[0]);
+  const [uploadEventType, setUploadEventType] = useState<'Baseline' | 'Construction' | 'Accident' | 'Deforestation' | 'Flood' | 'General'>('Baseline');
+  const [uploadZoomLevel, setUploadZoomLevel] = useState<number>(16);
+  const [uploadMapType, setUploadMapType] = useState<'satellite' | 'roadmap' | 'hybrid' | 'terrain'>('satellite');
+  const [uploadNotes, setUploadNotes] = useState<string>('');
+  const [alsoDownloadOnUpload, setAlsoDownloadOnUpload] = useState<boolean>(true);
+  const [uploadStatusMsg, setUploadStatusMsg] = useState<string>('');
 
   // Reset date range filter when selected place changes
   useEffect(() => {
@@ -206,7 +226,7 @@ export const SnapshotManager: React.FC<SnapshotManagerProps> = ({
     return `============================================================
        GEOGUARD SATELLITE INSPECTION REPORT                 
 ============================================================
-Target Location : ${selectedPlace.place_name} (${selectedPlace.area}, ${selectedPlace.city}, ${selectedPlace.country})
+Target Location : ${selectedPlace.place_name} (${selectedPlace.area ? `${selectedPlace.area}, ` : ''}${selectedPlace.city && selectedPlace.country && selectedPlace.city.toLowerCase().includes(selectedPlace.country.toLowerCase()) ? selectedPlace.city : `${selectedPlace.city}, ${selectedPlace.country}`})
 Coordinates     : Lat ${selectedPlace.latitude}, Lng ${selectedPlace.longitude}
 Baseline Image A: ${snapA.dateLabel} (Zoom ${snapA.zoomLevel}x, ${snapA.mapType})
 Current Image B : ${snapB.dateLabel} (Zoom ${snapB.zoomLevel}x, ${snapB.mapType})
@@ -305,6 +325,161 @@ GeoGuard Satellite Platform • Real-time Geospatial Monitoring
     link.click();
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
+  };
+
+  // Single Snapshot Image File Download
+  const handleSingleSnapshotDownload = (snap: MapSnapshot) => {
+    const link = document.createElement('a');
+    link.href = snap.imageUrl;
+    const cleanPlace = selectedPlace.place_name.replace(/\s+/g, '_');
+    const cleanDate = (snap.isoDate || snap.dateLabel || 'snapshot').replace(/[^a-zA-Z0-9]/g, '_');
+    link.download = `GeoGuard_Snapshot_${cleanPlace}_${cleanDate}_${snap.id.slice(-6)}.png`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  // Batch Download Filtered Images Simultaneously
+  const handleBatchDownloadImages = () => {
+    if (filteredSnapshots.length === 0) return;
+    filteredSnapshots.forEach((snap, idx) => {
+      setTimeout(() => {
+        handleSingleSnapshotDownload(snap);
+      }, idx * 200);
+    });
+  };
+
+  // Batch Download JSON Package
+  const handleBatchDownloadJson = () => {
+    if (filteredSnapshots.length === 0) return;
+    const payload = {
+      place: {
+        id: selectedPlace.id,
+        name: selectedPlace.place_name,
+        area: selectedPlace.area,
+        city: selectedPlace.city,
+        country: selectedPlace.country,
+        coordinates: { lat: selectedPlace.latitude, lng: selectedPlace.longitude },
+      },
+      exportedAt: new Date().toISOString(),
+      snapshotCount: filteredSnapshots.length,
+      snapshots: filteredSnapshots,
+    };
+
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    const cleanPlace = selectedPlace.place_name.replace(/\s+/g, '_');
+    link.download = `GeoGuard_Snapshots_${cleanPlace}_${new Date().toISOString().slice(0, 10)}.json`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
+  // Upload Snapshot File Handler (Supports Image & JSON package)
+  const handleFileSelect = (file: File) => {
+    setUploadFile(file);
+    setUploadStatusMsg('');
+
+    if (file.type.includes('json') || file.name.endsWith('.json')) {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        try {
+          const content = e.target?.result as string;
+          const parsed = JSON.parse(content);
+          let loadedSnaps: MapSnapshot[] = [];
+
+          if (Array.isArray(parsed)) {
+            loadedSnaps = parsed;
+          } else if (parsed.snapshots && Array.isArray(parsed.snapshots)) {
+            loadedSnaps = parsed.snapshots;
+          } else if (parsed.imageUrl && parsed.placeId) {
+            loadedSnaps = [parsed as MapSnapshot];
+          }
+
+          if (loadedSnaps.length > 0) {
+            let importedCount = 0;
+            loadedSnaps.forEach((snap) => {
+              const fullSnap: MapSnapshot = {
+                ...snap,
+                id: snap.id || `snap-import-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+                placeId: selectedPlace.id,
+              };
+              if (onAddSnapshot) {
+                onAddSnapshot(fullSnap);
+              } else {
+                saveSnapshot(fullSnap);
+              }
+              importedCount++;
+            });
+
+            setUploadStatusMsg(`Successfully imported ${importedCount} snapshot(s) from JSON package!`);
+
+            if (alsoDownloadOnUpload && loadedSnaps[0]?.imageUrl) {
+              handleSingleSnapshotDownload(loadedSnaps[0]);
+            }
+          } else {
+            setUploadStatusMsg('Could not find valid snapshot objects in JSON file.');
+          }
+        } catch (err) {
+          setUploadStatusMsg('Error parsing JSON package.');
+        }
+      };
+      reader.readAsText(file);
+    } else if (file.type.startsWith('image/')) {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const dataUrl = e.target?.result as string;
+        setUploadPreviewUrl(dataUrl);
+        setUploadStatusMsg(`Loaded image file (${(file.size / 1024).toFixed(1)} KB). Adjust details below.`);
+      };
+      reader.readAsDataURL(file);
+    } else {
+      setUploadStatusMsg('Unsupported file type. Please upload a PNG/JPG image or JSON file.');
+    }
+  };
+
+  const handleConfirmUpload = (downloadSimultaneously = false) => {
+    if (!uploadPreviewUrl) return;
+
+    const formattedDateLabel = new Date(uploadDate).toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+    });
+
+    const newSnap: MapSnapshot = {
+      id: `snap-upload-${selectedPlace.id}-${Date.now()}`,
+      placeId: selectedPlace.id,
+      capturedAt: new Date().toISOString(),
+      dateLabel: `${formattedDateLabel} (${uploadEventType})`,
+      isoDate: uploadDate,
+      imageUrl: uploadPreviewUrl,
+      zoomLevel: uploadZoomLevel,
+      mapType: uploadMapType,
+      notes: uploadNotes || `Custom snapshot uploaded on ${uploadDate}. Mode: ${uploadEventType}.`,
+      lat: selectedPlace.latitude,
+      lng: selectedPlace.longitude,
+      eventOverlay: uploadEventType,
+    };
+
+    if (onAddSnapshot) {
+      onAddSnapshot(newSnap);
+    } else {
+      saveSnapshot(newSnap);
+    }
+
+    if (downloadSimultaneously || alsoDownloadOnUpload) {
+      handleSingleSnapshotDownload(newSnap);
+    }
+
+    setIsUploadModalOpen(false);
+    setUploadPreviewUrl('');
+    setUploadFile(null);
+    setUploadStatusMsg('');
+    setUploadNotes('');
   };
 
   const handlePrintReport = () => {
@@ -450,9 +625,41 @@ GeoGuard Satellite Platform • Real-time Geospatial Monitoring
                 : `Showing ${filteredSnapshots.length} of ${snapshots.length} Snapshots`}
             </span>
           </div>
-          <p className="text-[11px] text-slate-500 font-medium">
-            Compare past and current snapshots to detect building construction, car accidents, nature events, or tree cutting.
-          </p>
+
+          {/* Upload & Download Actions Bar */}
+          <div className="flex items-center gap-2 flex-wrap">
+            <button
+              type="button"
+              onClick={() => setIsUploadModalOpen(true)}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-lg shadow-xs transition-all active:scale-95"
+            >
+              <Upload className="w-3.5 h-3.5" />
+              <span>Upload Snapshot</span>
+            </button>
+
+            {filteredSnapshots.length > 0 && (
+              <div className="flex items-center gap-1 bg-slate-50 p-0.5 rounded-lg border border-slate-200">
+                <button
+                  type="button"
+                  onClick={handleBatchDownloadImages}
+                  className="inline-flex items-center gap-1 px-2.5 py-1 bg-white hover:bg-slate-100 text-slate-700 font-bold text-[11px] rounded border border-slate-200 transition-colors shadow-2xs"
+                  title="Download all filtered snapshot PNG images simultaneously"
+                >
+                  <Download className="w-3 h-3 text-emerald-600" />
+                  <span>Download Images</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={handleBatchDownloadJson}
+                  className="inline-flex items-center gap-1 px-2.5 py-1 bg-white hover:bg-slate-100 text-slate-700 font-bold text-[11px] rounded border border-slate-200 transition-colors shadow-2xs"
+                  title="Export snapshots JSON dataset"
+                >
+                  <FileJson className="w-3 h-3 text-blue-600" />
+                  <span>JSON Package</span>
+                </button>
+              </div>
+            )}
+          </div>
         </div>
 
         {snapshots.length === 0 ? (
@@ -555,13 +762,24 @@ GeoGuard Satellite Platform • Real-time Geospatial Monitoring
                         </button>
                       </div>
 
-                      <button
-                        onClick={() => onDeleteSnapshot(snap.id)}
-                        className="p-1 text-slate-400 hover:text-rose-600 transition-colors"
-                        title="Delete snapshot"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
+                      <div className="flex items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() => handleSingleSnapshotDownload(snap)}
+                          className="p-1 text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
+                          title="Download snapshot image"
+                        >
+                          <Download className="w-3.5 h-3.5" />
+                        </button>
+
+                        <button
+                          onClick={() => onDeleteSnapshot(snap.id)}
+                          className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded transition-colors"
+                          title="Delete snapshot"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -1020,7 +1238,12 @@ GeoGuard Satellite Platform • Real-time Geospatial Monitoring
                 <div>
                   <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Target Monitored Site</span>
                   <p className="text-sm font-bold text-slate-900 mt-0.5">{selectedPlace.place_name}</p>
-                  <p className="text-slate-500 font-medium">{selectedPlace.area}, {selectedPlace.city}, {selectedPlace.country}</p>
+                  <p className="text-slate-500 font-medium">
+                    {selectedPlace.area ? `${selectedPlace.area}, ` : ''}
+                    {selectedPlace.city && selectedPlace.country && selectedPlace.city.toLowerCase().includes(selectedPlace.country.toLowerCase())
+                      ? selectedPlace.city
+                      : `${selectedPlace.city}, ${selectedPlace.country}`}
+                  </p>
                 </div>
 
                 <div>
@@ -1179,8 +1402,211 @@ GeoGuard Satellite Platform • Real-time Geospatial Monitoring
               <img src={previewSnapshot.imageUrl} alt={previewSnapshot.dateLabel} className="w-full h-full object-contain bg-black" />
             </div>
 
-            <div className="p-3 bg-slate-950 rounded-lg text-xs text-slate-300 italic">
-              &quot;{previewSnapshot.notes || 'No inspector notes.'}&quot;
+            <div className="p-3 bg-slate-950 rounded-lg text-xs text-slate-300 italic flex items-center justify-between gap-3">
+              <span>&quot;{previewSnapshot.notes || 'No inspector notes.'}&quot;</span>
+              <button
+                type="button"
+                onClick={() => handleSingleSnapshotDownload(previewSnapshot)}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-lg shadow-xs transition-all active:scale-95 flex-shrink-0"
+              >
+                <Download className="w-3.5 h-3.5" />
+                <span>Download High-Res Image</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Upload & Download Simultaneous Snapshot Modal */}
+      {isUploadModalOpen && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-white border border-slate-200 rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-5 text-slate-900 animate-in fade-in zoom-in-95 duration-150 my-8">
+            {/* Modal Header */}
+            <div className="flex items-start justify-between border-b border-slate-200 pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-blue-100 text-blue-700 border border-blue-200 flex items-center justify-center font-bold shadow-xs">
+                  <Upload className="w-5 h-5 text-blue-600" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-slate-900">Upload Custom Snapshot</h3>
+                  <p className="text-xs text-slate-500 font-medium">
+                    Upload satellite image or JSON package for <strong>{selectedPlace.place_name}</strong> and download simultaneously.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsUploadModalOpen(false);
+                  setUploadPreviewUrl('');
+                  setUploadFile(null);
+                  setUploadStatusMsg('');
+                }}
+                className="text-slate-400 hover:text-slate-700 p-1.5 rounded-lg hover:bg-slate-100 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Upload File Selection */}
+            <div className="space-y-4">
+              <div className="relative border-2 border-dashed border-blue-300 hover:border-blue-500 bg-blue-50/40 rounded-xl p-5 text-center transition-colors cursor-pointer group">
+                <input
+                  type="file"
+                  accept="image/png,image/jpeg,image/jpg,image/webp,application/json"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) handleFileSelect(file);
+                  }}
+                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
+                />
+                <div className="flex flex-col items-center gap-2 pointer-events-none">
+                  <div className="w-10 h-10 rounded-full bg-white border border-blue-200 flex items-center justify-center shadow-xs text-blue-600 group-hover:scale-110 transition-transform">
+                    <FileUp className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <p className="text-xs font-bold text-slate-800">
+                      Click to browse or drag &amp; drop file here
+                    </p>
+                    <p className="text-[11px] text-slate-500 mt-0.5">
+                      Supports PNG, JPG, WEBP satellite map images or GeoGuard JSON snapshot packages
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {uploadStatusMsg && (
+                <div className="p-2.5 bg-blue-50 border border-blue-200 rounded-lg text-xs font-semibold text-blue-800 flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-blue-600 flex-shrink-0" />
+                  <span>{uploadStatusMsg}</span>
+                </div>
+              )}
+
+              {/* Upload Image Config Inputs */}
+              {uploadPreviewUrl ? (
+                <div className="space-y-3">
+                  <div className="relative h-44 rounded-xl overflow-hidden border border-slate-200 bg-slate-900 shadow-inner">
+                    <img src={uploadPreviewUrl} alt="Uploaded Snapshot Preview" className="w-full h-full object-cover" />
+                    <div className="absolute top-2 left-2 bg-slate-900/80 backdrop-blur-md px-2.5 py-1 rounded-md text-[10px] font-bold text-white border border-slate-700 flex items-center gap-1.5">
+                      <Check className="w-3.5 h-3.5 text-emerald-400" />
+                      <span>Image File Ready ({uploadFile?.name})</span>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3 bg-slate-50 p-3 rounded-xl border border-slate-200">
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-700 mb-1">Snapshot Date</label>
+                      <input
+                        type="date"
+                        value={uploadDate}
+                        onChange={(e) => setUploadDate(e.target.value)}
+                        className="w-full bg-white text-slate-800 text-xs font-medium px-2.5 py-1.5 rounded border border-slate-300 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-700 mb-1">Temporal Event Overlay</label>
+                      <select
+                        value={uploadEventType}
+                        onChange={(e: any) => setUploadEventType(e.target.value)}
+                        className="w-full bg-white text-slate-800 text-xs font-medium px-2.5 py-1.5 rounded border border-slate-300 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                      >
+                        <option value="Baseline">Normal / Baseline</option>
+                        <option value="Construction">Building Construction</option>
+                        <option value="Accident">Car Accident / Incident</option>
+                        <option value="Deforestation">Tree Cutting / Forest</option>
+                        <option value="Flood">Nature Event / Water Flood</option>
+                        <option value="General">Custom Inspection</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-700 mb-1">Zoom Level ({uploadZoomLevel}x)</label>
+                      <input
+                        type="range"
+                        min={2}
+                        max={21}
+                        value={uploadZoomLevel}
+                        onChange={(e) => setUploadZoomLevel(Number(e.target.value))}
+                        className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-blue-600 mt-1"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-700 mb-1">Map View Type</label>
+                      <select
+                        value={uploadMapType}
+                        onChange={(e: any) => setUploadMapType(e.target.value)}
+                        className="w-full bg-white text-slate-800 text-xs font-medium px-2.5 py-1.5 rounded border border-slate-300 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                      >
+                        <option value="satellite">🛰️ Satellite</option>
+                        <option value="roadmap">🗺️ Roadmap</option>
+                        <option value="hybrid">👁️ Hybrid</option>
+                        <option value="terrain">⛰️ Terrain</option>
+                      </select>
+                    </div>
+
+                    <div className="col-span-2">
+                      <label className="block text-[11px] font-bold text-slate-700 mb-1">Inspector Notes</label>
+                      <input
+                        type="text"
+                        placeholder="Notes on uploaded snapshot image..."
+                        value={uploadNotes}
+                        onChange={(e) => setUploadNotes(e.target.value)}
+                        className="w-full bg-white text-slate-800 text-xs font-medium px-2.5 py-1.5 rounded border border-slate-300 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                      />
+                    </div>
+                  </div>
+
+                  <label className="flex items-center gap-2 p-2.5 bg-emerald-50/80 border border-emerald-200 rounded-xl cursor-pointer hover:bg-emerald-100/60 transition-colors">
+                    <input
+                      type="checkbox"
+                      checked={alsoDownloadOnUpload}
+                      onChange={(e) => setAlsoDownloadOnUpload(e.target.checked)}
+                      className="w-4 h-4 text-emerald-600 rounded border-slate-300 focus:ring-emerald-500 accent-emerald-600 cursor-pointer"
+                    />
+                    <span className="text-xs font-bold text-emerald-900">
+                      Also download PNG image copy to computer simultaneously upon upload
+                    </span>
+                  </label>
+                </div>
+              ) : null}
+            </div>
+
+            {/* Actions */}
+            <div className="flex flex-wrap items-center justify-end gap-2 pt-3 border-t border-slate-200">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsUploadModalOpen(false);
+                  setUploadPreviewUrl('');
+                  setUploadFile(null);
+                  setUploadStatusMsg('');
+                }}
+                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-lg border border-slate-200 transition-colors"
+              >
+                Cancel
+              </button>
+
+              {uploadPreviewUrl ? (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => handleConfirmUpload(false)}
+                    className="px-4 py-2 bg-slate-800 hover:bg-slate-900 text-white text-xs font-bold rounded-lg shadow-xs transition-all"
+                  >
+                    Upload &amp; Save Only
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleConfirmUpload(true)}
+                    className="inline-flex items-center gap-2 px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-lg shadow-md transition-all active:scale-95"
+                  >
+                    <Download className="w-4 h-4" />
+                    <span>Upload &amp; Download Simultaneously</span>
+                  </button>
+                </>
+              ) : null}
             </div>
           </div>
         </div>
