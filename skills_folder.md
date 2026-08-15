@@ -1,3 +1,4 @@
+```
 skills/
 └── geoguard-monitoring/
     ├── SKILL.md
@@ -6,6 +7,7 @@ skills/
         ├── storage-persistence.md
         ├── gemini-pipeline.md
         └── ui-components.md
+```
 
 
 ---
