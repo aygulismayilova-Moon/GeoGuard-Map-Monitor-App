@@ -1,7 +1,7 @@
 # GeoGuard Map Monitor & Change Detector 
 
 # Program link:
-https://geoguard-map-monitor-change-detector-4470.ai.studio/
+https://remix-geoguard-map-monitor-change-detector-116820486508.europe-west1.run.app/
 
 # Overview 
 
